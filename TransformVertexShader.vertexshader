@@ -1,0 +1,49 @@
+#version 330 core
+
+// Input attributes for the vertex shader.
+// These are provided per-vertex by the vertex buffer.
+layout(location = 0) in vec3 vertexPosition_modelspace;  // Vertex position in model space.
+layout(location = 1) in vec2 vertexUV;                  // Texture coordinates (UV).
+layout(location = 2) in vec3 vertexNormal_modelspace;   // Vertex normal in model space.
+
+// Output variables passed to the fragment shader.
+// These will be interpolated across the primitive's surface.
+out vec2 UV;                              // Interpolated UV coordinates.
+out vec3 Position_worldspace;             // Vertex position in world space.
+out vec3 Normal_cameraspace;              // Normal vector in camera space.
+out vec3 EyeDirection_cameraspace;        // Direction from the vertex to the camera in camera space.
+out vec3 LightDirections_cameraspace[5];  // Array of light directions in camera space.
+
+// Uniform variables remain constant for all vertices during a single draw call.
+// These are provided by the application.
+uniform mat4 MVP;                         // Model-View-Projection matrix.
+uniform mat4 V;                           // View matrix.
+uniform mat4 M;                           // Model matrix.
+uniform vec3 LightPositions_worldspace[5]; // Array of light positions in world space.
+
+void main() {
+    // Compute the vertex position in clip space using the MVP matrix.
+    gl_Position = MVP * vec4(vertexPosition_modelspace, 1.0);
+
+    // Compute the vertex position in world space by transforming with the Model matrix.
+    Position_worldspace = (M * vec4(vertexPosition_modelspace, 1.0)).xyz;
+
+    // Compute the vertex position in camera space by transforming with the View and Model matrices.
+    vec3 vertexPosition_cameraspace = (V * M * vec4(vertexPosition_modelspace, 1.0)).xyz;
+
+    // Calculate the direction from the vertex to the camera in camera space.
+    EyeDirection_cameraspace = vec3(0.0, 0.0, 0.0) - vertexPosition_cameraspace;
+
+    // Transform light positions from world space to camera space and compute the light direction.
+    for (int i = 0; i < 5; i++) {
+        vec3 LightPosition_cameraspace = (V * vec4(LightPositions_worldspace[i], 1.0)).xyz;
+        LightDirections_cameraspace[i] = LightPosition_cameraspace + EyeDirection_cameraspace;
+    }
+
+    // Transform the vertex normal from model space to camera space.
+    // Note: This assumes that the Model matrix does not include any non-uniform scaling.
+    Normal_cameraspace = (V * M * vec4(vertexNormal_modelspace, 0.0)).xyz;
+
+    // Pass through the UV coordinates directly to the fragment shader.
+    UV = vertexUV;
+}

@@ -1,0 +1,13 @@
+
+newmtl Material
+Tr 0.0000
+Tf 1.0000 1.0000 1.0000
+illum 1
+Pm 0.004545454401522875
+Pr 1
+Pds 1
+Pl 1
+Ka 1 1 1
+Kd 1 1 1
+Ke 0 0 0
+map_Kd player.png
