@@ -13,11 +13,11 @@ out vec3 color;
 // Uniform values that remain constant for the entire draw call.
 uniform sampler2D myTextureSampler;      // Sampler for the diffuse texture.
 uniform mat4 MV;                         // Model-View matrix.
-uniform vec3 LightPosition_worldspace;   // Position of a reference light source in world space.
+uniform vec3 LightPositions_worldspace[5]; // Array of light positions in world space.
 
 // Light emission properties.
 vec3 LightColor = vec3(1.0, 0.75, 0.135); // The color of the light (e.g., warm yellow).
-float LightPower = 50.0f;                // Intensity of the light source.
+float LightPower = 200.0f;                // Intensity of the light source.
 
 // Material properties for the surface.
 vec3 MaterialDiffuseColor = texture(myTextureSampler, UV).rgb;         // Surface diffuse color sampled from the texture.
@@ -30,9 +30,10 @@ vec3 MaterialSpecularColor = vec3(0.3, 0.3, 0.3);                       // Specu
  * @param lightDir - Direction vector from the fragment to the light source.
  * @param normal - Normal vector of the fragment in camera space.
  * @param eyeDir - Direction vector from the fragment to the camera in camera space.
+ * @param lightPos - The world position of the light source (needed for distance attenuation).
  * @return vec3 - Lighting contribution as a color vector.
  */
-vec3 calculateLighting(vec3 lightDir, vec3 normal, vec3 eyeDir) {
+vec3 calculateLighting(vec3 lightDir, vec3 normal, vec3 eyeDir, vec3 lightPos) {
     // Normalize the normal vector to ensure consistent lighting calculations.
     vec3 n = normalize(normal);
 
@@ -53,8 +54,11 @@ vec3 calculateLighting(vec3 lightDir, vec3 normal, vec3 eyeDir) {
     // This determines the specular lighting intensity.
     float cosAlpha = clamp(dot(E, R), 0.0, 1.0);
 
-    // Return the sum of the diffuse and specular contributions, scaled by the light's power and color.
-    return (LightColor * LightPower * cosTheta) + (MaterialSpecularColor * LightColor * LightPower * pow(cosAlpha, 5));
+    // Calculate the distance to the light source for attenuation
+    float distance = length(lightPos - Position_worldspace);
+
+    // Return the sum of the diffuse and specular contributions, scaled by the light's power and color, and attenuated by distance
+    return (LightColor * LightPower * cosTheta) + (MaterialSpecularColor * LightColor * LightPower * pow(cosAlpha, 5.0)) / (distance * distance);
 }
 
 void main() {
@@ -66,13 +70,10 @@ void main() {
         // Direction vector from the fragment to the current light source in camera space.
         vec3 lightDirection = LightDirections_cameraspace[i];
 
-        // Calculate the distance to the light source in world space for attenuation.
-        float distance = length(LightPosition_worldspace - Position_worldspace);
-
-        // Add the lighting contribution from the current light source, attenuated by distance.
-        finalColor += calculateLighting(lightDirection, Normal_cameraspace, EyeDirection_cameraspace) / (distance * distance);
+        // Add the lighting contribution from the current light source
+        finalColor += calculateLighting(lightDirection, Normal_cameraspace, EyeDirection_cameraspace, LightPositions_worldspace[i]);
     }
 
     // Set the output fragment color to the final computed value.
-    color = finalColor;
+    color = finalColor * MaterialDiffuseColor;  // Adding texture color effect
 }
