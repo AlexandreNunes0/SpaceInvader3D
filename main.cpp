@@ -256,7 +256,7 @@ int main(void) {
     std::vector<std::string> textures;
     std::vector<GLuint> textureIDs;  // Store texture IDs for each material
 
-    if (!OBJloadingfunction("obj/player.obj", "obj", vertices, uvs, normals, materials, textures, textureIDs)) {
+    if (!OBJloadingfunction("obj/alien2.obj", "obj", vertices, uvs, normals, materials, textures, textureIDs)) {
         fprintf(stderr, "Failed to load OBJ file\n");
         return -1;
     }
@@ -292,7 +292,7 @@ int main(void) {
     glUniform3fv(glGetUniformLocation(programID, "LightPositions_worldspace"), 5, &lightPositions[0][0]);
 
     // Start the main loop
-    float uniformScale = 1.0f;
+    float uniformScale = 0.2f;
 
     do {
         // Clear the screen by resetting the color and depth buffers
