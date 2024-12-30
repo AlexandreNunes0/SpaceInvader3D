@@ -29,6 +29,12 @@ using namespace glm;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#define DEBUG true 
+
+#define DEBUG_PRINT(msg) if (DEBUG) { std::cout << msg << std::endl; }
+
+
+
 // Cache structure to hold parsed OBJ data
 struct ObjCache {
     std::vector<glm::vec3> vertices;
@@ -66,16 +72,16 @@ std::map<std::string, ObjCache> objCache;
 // Function to load textures and cache them
 GLuint loadTexture(const std::string& texturePath) {
     if (textureCache.find(texturePath) != textureCache.end()) {
-        std::cout << "Texture already loaded: " << texturePath << std::endl;
+        DEBUG_PRINT("Texture already loaded: " << texturePath);
         return textureCache[texturePath];
     }
 
     int width, height, channels;
-    std::cout << "Attempting to load texture from: " << texturePath << std::endl;
+    DEBUG_PRINT("Attempting to load texture from: " << texturePath);
     unsigned char* data = stbi_load(texturePath.c_str(), &width, &height, &channels, 0);
     if (!data) {
-        std::cerr << "Failed to load texture: " << texturePath << std::endl;
-        std::cerr << "stbi_error: " << stbi_failure_reason() << std::endl;
+        DEBUG_PRINT("Failed to load texture: " << texturePath);
+        DEBUG_PRINT("stbi_error: " << stbi_failure_reason() );
         return 0;
     }
 
@@ -100,7 +106,7 @@ GLuint loadTexture(const std::string& texturePath) {
 
     textureCache[texturePath] = textureID;  // Cache the loaded texture
 
-    std::cout << "Successfully loaded texture: " << texturePath << std::endl;
+    DEBUG_PRINT("Successfully loaded texture: " << texturePath );
     return textureID;
 }
 
@@ -133,7 +139,7 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    std::cout << "Loading OBJ file: " << objpath << std::endl;
+    DEBUG_PRINT("Loading OBJ file: " << objpath );
     bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, objpath, mtlpath);
 
     if (!warn.empty()) {
@@ -156,7 +162,7 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         if (!material.diffuse_texname.empty()) {
             std::string fullTexturePath = mtlFolderPath + "/" + material.diffuse_texname;
             out_textures.push_back(fullTexturePath);
-            std::cout << "Found texture: " << fullTexturePath << std::endl;
+            DEBUG_PRINT("Found texture: " << fullTexturePath );
         }
         else {
             out_textures.push_back("");
@@ -209,15 +215,15 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
     cache.textureIDs = out_textureIDs;
     objCache[objpath] = cache;
 
-    std::cout << "OBJ file loaded successfully.\n";
+    DEBUG_PRINT("OBJ file loaded successfully.");
     return true;
 }
 
 // Function to load game object data and initialize buffers
 void loadGameObject(GameObject& obj) {
-    std::cout << "Loading GameObject: " << obj.objFile << std::endl;
+    DEBUG_PRINT( "Loading GameObject: " << obj.objFile );
     if (!OBJloadingfunction(obj.objFile.c_str(), obj.mtlFile.c_str(), obj.vertices, obj.uvs, obj.normals, obj.materials, obj.textures, obj.textureIDs)) {
-        std::cerr << "Failed to load GameObject: " << obj.objFile << std::endl;
+        DEBUG_PRINT("Failed to load GameObject: " << obj.objFile );
         return;
     }
 
@@ -247,60 +253,32 @@ void loadGameObject(GameObject& obj) {
     }
 }
 
+// Function to load the player ship
+void createPlayer(GameObject& playerShip) {
+    DEBUG_PRINT("Creating player...)");
+    playerShip.objFile = "obj/player.obj";
+    playerShip.mtlFile = "obj";
+    playerShip.position = glm::vec3(2.0f, -22.0f, 0.0f);  // Set player lower in the scene
+    loadGameObject(playerShip);
+    DEBUG_PRINT("Player created");
+}
 
-// Main loop to render objects
-int main(void) {
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW\n";
-        return -1;
-    }
+// Function to load the mothership
+void createMothership(GameObject& motherShip) {
+    DEBUG_PRINT("Creating mothership...");
+    motherShip.objFile = "obj/mothership.obj";
+    motherShip.mtlFile = "obj";
+    motherShip.position = glm::vec3( 1.0f, 12.0f, 0.0f);  
+    loadGameObject(motherShip);
+    DEBUG_PRINT("Mothership created");
+}
 
-    glfwWindowHint(GLFW_SAMPLES, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    window = glfwCreateWindow(1920, 1080, "Space Invaders | Trabalho Final", NULL, NULL);
-    if (window == NULL) {
-        std::cerr << "Failed to open GLFW window.\n";
-        glfwTerminate();
-        return -1;
-    }
-
-    glfwMakeContextCurrent(window);
-    glewExperimental = true;
-    if (glewInit() != GLEW_OK) {
-        std::cerr << "Failed to initialize GLEW\n";
-        glfwTerminate();
-        return -1;
-    }
-
-    glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSetCursorPos(window, 1920 / 2, 1080 / 2);
-
-    glClearColor(0.4f, 0.4f, 0.4f, 0.0f);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glEnable(GL_CULL_FACE);
-
-    GLuint programID = LoadShaders("TransformVertexShader.vertexshader", "TextureFragmentShader.fragmentshader");
-    std::cout << "Shaders loaded successfully.\n";
-
-    GLuint MatrixID = glGetUniformLocation(programID, "MVP");
-    GLuint ViewMatrixID = glGetUniformLocation(programID, "V");
-    GLuint ModelMatrixID = glGetUniformLocation(programID, "M");
-    GLuint textureID = glGetUniformLocation(programID, "textureSampler");
-
-    std::vector<GameObject> aliens;
-
-    // Create aliens dynamically
+// Function to create aliens dynamically
+void createAliens(std::vector<GameObject>& aliens_vector) {
     const float spacing = 5.0f;
     const glm::vec3 startPos(-6.0f, 4.0f, 0.0f);
+    DEBUG_PRINT("Creating aliens...");
 
-    std::cout << "Creating aliens...\n";
     for (int row = 0; row < 5; ++row) {
         for (int col = 0; col < 4; ++col) {
             GameObject alien;
@@ -319,11 +297,131 @@ int main(void) {
 
             alien.position = startPos + glm::vec3(col * spacing, -row * spacing, 0.0f);
             loadGameObject(alien);
-            aliens.push_back(alien);
+            aliens_vector.push_back(alien);
         }
     }
 
-    std::cout << "Aliens created: " << aliens.size() << std::endl;
+    DEBUG_PRINT("Aliens created: " << aliens_vector.size() );
+}
+
+// Function to initialize the game objects (Player, Mothership, Aliens)
+void initializeGameObjects(std::vector<GameObject>& aliens_vector, GameObject& playerShip, GameObject& motherShip) {
+    createPlayer(playerShip);
+    createMothership(motherShip);
+    createAliens(aliens_vector);
+}
+
+
+
+
+
+// Function to render any game object
+void renderObject(const GameObject& obj, GLuint MatrixID, GLuint ModelMatrixID, GLuint ViewMatrixID, GLuint textureID, const glm::mat4& ProjectionMatrix, const glm::mat4& ViewMatrix) {
+    // Set up model matrix for translation
+    glm::mat4 MVP = ProjectionMatrix * ViewMatrix * obj.modelMatrix;
+
+    // Send the transformation matrices to the shaders
+    glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+    glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &obj.modelMatrix[0][0]);
+    glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &ViewMatrix[0][0]);
+
+    // Bind textures
+    for (size_t i = 0; i < obj.textures.size(); i++) {
+        if (obj.textureIDs[i] != 0) {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(GL_TEXTURE_2D, obj.textureIDs[i]);
+            glUniform1i(textureID, i);
+        }
+    }
+
+    // Bind VAO and draw
+    glBindVertexArray(obj.vertexArrayID);
+
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, obj.vertexBuffer);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    glEnableVertexAttribArray(1);
+    glBindBuffer(GL_ARRAY_BUFFER, obj.uvBuffer);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    glEnableVertexAttribArray(2);
+    glBindBuffer(GL_ARRAY_BUFFER, obj.normalBuffer);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    // Draw the object
+    glDrawArrays(GL_TRIANGLES, 0, obj.vertices.size());
+
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(2);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int main(void) {
+    // GLFW and GLEW initialization code (same as before)
+    if (!glfwInit()) {
+        DEBUG_PRINT("Failed to initialize GLFW");
+        return -1;
+    }
+
+    glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    window = glfwCreateWindow(1920, 1080, "Space Invaders | Trabalho Final", NULL, NULL);
+    if (window == NULL) {
+        DEBUG_PRINT("Failed to open GLFW window.");
+        glfwTerminate();
+        return -1;
+    }
+
+    glfwMakeContextCurrent(window);
+    glewExperimental = true;
+    if (glewInit() != GLEW_OK) {
+        DEBUG_PRINT("Failed to initialize GLEW");
+        glfwTerminate();
+        return -1;
+    }
+
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetCursorPos(window, 1920 / 2, 1080 / 2);
+
+    glClearColor(0.4f, 0.4f, 0.4f, 0.0f);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glEnable(GL_CULL_FACE);
+
+    GLuint programID = LoadShaders("TransformVertexShader.vertexshader", "TextureFragmentShader.fragmentshader");
+    DEBUG_PRINT("Shaders loaded successfully.");
+
+    GLuint MatrixID = glGetUniformLocation(programID, "MVP");
+    GLuint ViewMatrixID = glGetUniformLocation(programID, "V");
+    GLuint ModelMatrixID = glGetUniformLocation(programID, "M");
+    GLuint textureID = glGetUniformLocation(programID, "textureSampler");
+
+    std::vector<GameObject> aliens_vector;
+    GameObject playerShip, motherShip;
+
+    // Initialize all game objects (player, mothership, aliens)
+    initializeGameObjects(aliens_vector, playerShip, motherShip);
 
     // Main render loop
     do {
@@ -334,50 +432,32 @@ int main(void) {
         glm::mat4 ProjectionMatrix = getProjectionMatrix();
         glm::mat4 ViewMatrix = getViewMatrix();
 
-        for (auto& alien : aliens) {
+        // Render each alien dynamically
+        for (auto& alien : aliens_vector) {
             alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position);
-            glm::mat4 MVP = ProjectionMatrix * ViewMatrix * alien.modelMatrix;
-
-            glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
-            glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &alien.modelMatrix[0][0]);
-            glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &ViewMatrix[0][0]);
-
-            for (size_t i = 0; i < alien.textures.size(); i++) {
-                if (alien.textureIDs[i] != 0) {
-                    glActiveTexture(GL_TEXTURE0 + i);
-                    glBindTexture(GL_TEXTURE_2D, alien.textureIDs[i]);
-                    glUniform1i(textureID, i);
-                }
-            }
-
-            // Bind and draw the object
-            glBindVertexArray(alien.vertexArrayID);
-            glEnableVertexAttribArray(0);
-            glBindBuffer(GL_ARRAY_BUFFER, alien.vertexBuffer);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-            glEnableVertexAttribArray(1);
-            glBindBuffer(GL_ARRAY_BUFFER, alien.uvBuffer);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-            glEnableVertexAttribArray(2);
-            glBindBuffer(GL_ARRAY_BUFFER, alien.normalBuffer);
-            glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-            glDrawArrays(GL_TRIANGLES, 0, alien.vertices.size());
-
-            glDisableVertexAttribArray(0);
-            glDisableVertexAttribArray(1);
-            glDisableVertexAttribArray(2);
+            renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
         }
+
+        // Render player ship
+        playerShip.modelMatrix = glm::translate(glm::mat4(1.0f), playerShip.position);
+        renderObject(playerShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+
+        // Render mothership
+        motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position);
+        renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
-    } while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS && glfwWindowShouldClose(window) == 0);
 
-    std::cout << "Exiting program...\n";
+    } while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS &&
+        glfwWindowShouldClose(window) == 0);
+
     glfwTerminate();
     return 0;
 }
+
+
+
+
 
 
