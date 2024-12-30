@@ -1,10 +1,8 @@
-// Standard headers
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
 #include <iostream>
 #include <map> 
-
 
 // OpenGL Extension Wrangler
 #include <GL/glew.h>
@@ -24,7 +22,6 @@ using namespace glm;
 #include <common/vboindexer.hpp>
 #include <common/texture.hpp>
 
-
 // Include TinyObjLoader
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -32,6 +29,7 @@ using namespace glm;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+// GameObject structure
 struct GameObject {
     std::string objFile;
     std::string mtlFile;
@@ -43,9 +41,23 @@ struct GameObject {
     std::vector<GLuint> textureIDs;
     glm::vec3 position;
     glm::mat4 modelMatrix;
+    GLuint vertexArrayID;
+    GLuint vertexBuffer;
+    GLuint uvBuffer;
+    GLuint normalBuffer;
 };
 
+// Texture cache to avoid reloading the same texture multiple times
+std::map<std::string, GLuint> textureCache;
+
+// Function to load textures and cache them
 GLuint loadTexture(const std::string& texturePath) {
+    // Check if the texture is already loaded
+    if (textureCache.find(texturePath) != textureCache.end()) {
+        std::cout << "Texture already loaded: " << texturePath << std::endl;
+        return textureCache[texturePath];
+    }
+
     int width, height, channels;
     std::cout << "Attempting to load texture from: " << texturePath << std::endl;
     unsigned char* data = stbi_load(texturePath.c_str(), &width, &height, &channels, 0);
@@ -74,10 +86,13 @@ GLuint loadTexture(const std::string& texturePath) {
     glGenerateMipmap(GL_TEXTURE_2D);
     stbi_image_free(data);
 
+    textureCache[texturePath] = textureID;  // Cache the loaded texture
+
     std::cout << "Successfully loaded texture: " << texturePath << std::endl;
     return textureID;
 }
 
+// Function to load the OBJ file and materials, and store the data
 bool OBJloadingfunction(const char* objpath, const char* mtlpath,
     std::vector<glm::vec3>& out_vertices,
     std::vector<glm::vec2>& out_uvs,
@@ -91,6 +106,7 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
+    std::cout << "Loading OBJ file: " << objpath << std::endl;
     bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, objpath, mtlpath);
 
     if (!warn.empty()) {
@@ -101,9 +117,7 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         return false;
     }
 
-    std::cout << "Successfully loaded OBJ file: " << objpath << std::endl;
     out_materials = materials;
-    std::cout << "Extracted " << materials.size() << " materials from MTL file." << std::endl;
 
     std::string mtlFolderPath = std::string(mtlpath);
     size_t lastSlash = mtlFolderPath.find_last_of('/');
@@ -119,7 +133,6 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         }
         else {
             out_textures.push_back("");
-            std::cout << "No texture for material." << std::endl;
         }
     }
 
@@ -133,7 +146,6 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         }
     }
 
-    std::cout << "Extracting vertex data..." << std::endl;
     for (const auto& shape : shapes) {
         for (const auto& index : shape.mesh.indices) {
             glm::vec3 vertex;
@@ -160,27 +172,45 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         }
     }
 
-    std::cout << "Finished extracting vertices, uvs, and normals." << std::endl;
-
+    std::cout << "OBJ file loaded successfully.\n";
     return true;
 }
 
+// Function to load game object data and initialize buffers
 void loadGameObject(GameObject& obj) {
+    std::cout << "Loading GameObject: " << obj.objFile << std::endl;
     if (!OBJloadingfunction(obj.objFile.c_str(), obj.mtlFile.c_str(), obj.vertices, obj.uvs, obj.normals, obj.materials, obj.textures, obj.textureIDs)) {
         std::cerr << "Failed to load GameObject: " << obj.objFile << std::endl;
+        return;
     }
-    else {
-        std::cout << "GameObject loaded successfully: " << obj.objFile << std::endl;
-    }
+
+    glGenVertexArrays(1, &obj.vertexArrayID);
+    glBindVertexArray(obj.vertexArrayID);
+
+    // Vertex Buffer
+    glGenBuffers(1, &obj.vertexBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, obj.vertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, obj.vertices.size() * sizeof(glm::vec3), &obj.vertices[0], GL_STATIC_DRAW);
+
+    // UV Buffer
+    glGenBuffers(1, &obj.uvBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, obj.uvBuffer);
+    glBufferData(GL_ARRAY_BUFFER, obj.uvs.size() * sizeof(glm::vec2), &obj.uvs[0], GL_STATIC_DRAW);
+
+    // Normal Buffer
+    glGenBuffers(1, &obj.normalBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, obj.normalBuffer);
+    glBufferData(GL_ARRAY_BUFFER, obj.normals.size() * sizeof(glm::vec3), &obj.normals[0], GL_STATIC_DRAW);
+
+    std::cout << "GameObject buffers created successfully.\n";
 }
 
+// Main loop to render objects
 int main(void) {
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
         return -1;
     }
-
-    std::cout << "GLFW initialized successfully." << std::endl;
 
     glfwWindowHint(GLFW_SAMPLES, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -195,18 +225,13 @@ int main(void) {
         return -1;
     }
 
-    std::cout << "GLFW window created successfully." << std::endl;
-
     glfwMakeContextCurrent(window);
-
     glewExperimental = true;
     if (glewInit() != GLEW_OK) {
         std::cerr << "Failed to initialize GLEW\n";
         glfwTerminate();
         return -1;
     }
-
-    std::cout << "GLEW initialized successfully." << std::endl;
 
     glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -218,16 +243,8 @@ int main(void) {
     glDepthFunc(GL_LESS);
     glEnable(GL_CULL_FACE);
 
-    GLuint VertexArrayID;
-    glGenVertexArrays(1, &VertexArrayID);
-    glBindVertexArray(VertexArrayID);
-
     GLuint programID = LoadShaders("TransformVertexShader.vertexshader", "TextureFragmentShader.fragmentshader");
-    if (programID == 0) {
-        std::cerr << "Shader program failed to load.\n";
-        return -1;
-    }
-    std::cout << "Shaders loaded successfully." << std::endl;
+    std::cout << "Shaders loaded successfully.\n";
 
     GLuint MatrixID = glGetUniformLocation(programID, "MVP");
     GLuint ViewMatrixID = glGetUniformLocation(programID, "V");
@@ -237,10 +254,10 @@ int main(void) {
     std::vector<GameObject> aliens;
 
     // Create aliens dynamically
-    const float spacing = 5.0f; // Distance between aliens
-    const glm::vec3 startPos(-6.0f, 4.0f, 0.0f); // Starting position for the grid
+    const float spacing = 5.0f;
+    const glm::vec3 startPos(-6.0f, 4.0f, 0.0f);
 
-    std::cout << "Creating aliens..." << std::endl;
+    std::cout << "Creating aliens...\n";
     for (int row = 0; row < 5; ++row) {
         for (int col = 0; col < 4; ++col) {
             GameObject alien;
@@ -263,11 +280,11 @@ int main(void) {
         }
     }
 
-    std::cout << "Starting render loop..." << std::endl;
+    std::cout << "Aliens created: " << aliens.size() << std::endl;
 
+    // Main render loop
     do {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         glUseProgram(programID);
 
         computeMatricesFromInputs();
@@ -282,7 +299,6 @@ int main(void) {
             glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &alien.modelMatrix[0][0]);
             glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &ViewMatrix[0][0]);
 
-            // Bind texture and set it to the sampler
             for (size_t i = 0; i < alien.textures.size(); i++) {
                 if (alien.textureIDs[i] != 0) {
                     glActiveTexture(GL_TEXTURE0 + i);
@@ -291,33 +307,18 @@ int main(void) {
                 }
             }
 
-            // Set up and bind buffers (VAO, VBO, etc.)
-            GLuint vertexBuffer;
-            glGenBuffers(1, &vertexBuffer);
-            glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-            glBufferData(GL_ARRAY_BUFFER, alien.vertices.size() * sizeof(glm::vec3), &alien.vertices[0], GL_STATIC_DRAW);
-
-            GLuint uvBuffer;
-            glGenBuffers(1, &uvBuffer);
-            glBindBuffer(GL_ARRAY_BUFFER, uvBuffer);
-            glBufferData(GL_ARRAY_BUFFER, alien.uvs.size() * sizeof(glm::vec2), &alien.uvs[0], GL_STATIC_DRAW);
-
-            GLuint normalBuffer;
-            glGenBuffers(1, &normalBuffer);
-            glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
-            glBufferData(GL_ARRAY_BUFFER, alien.normals.size() * sizeof(glm::vec3), &alien.normals[0], GL_STATIC_DRAW);
-
-            // Draw call
+            // Bind and draw the object
+            glBindVertexArray(alien.vertexArrayID);
             glEnableVertexAttribArray(0);
-            glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+            glBindBuffer(GL_ARRAY_BUFFER, alien.vertexBuffer);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
             glEnableVertexAttribArray(1);
-            glBindBuffer(GL_ARRAY_BUFFER, uvBuffer);
+            glBindBuffer(GL_ARRAY_BUFFER, alien.uvBuffer);
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
             glEnableVertexAttribArray(2);
-            glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+            glBindBuffer(GL_ARRAY_BUFFER, alien.normalBuffer);
             glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
             glDrawArrays(GL_TRIANGLES, 0, alien.vertices.size());
@@ -325,17 +326,13 @@ int main(void) {
             glDisableVertexAttribArray(0);
             glDisableVertexAttribArray(1);
             glDisableVertexAttribArray(2);
-
-            glDeleteBuffers(1, &vertexBuffer);
-            glDeleteBuffers(1, &uvBuffer);
-            glDeleteBuffers(1, &normalBuffer);
         }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     } while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS && glfwWindowShouldClose(window) == 0);
 
+    std::cout << "Exiting program...\n";
     glfwTerminate();
-    std::cout << "Exiting program..." << std::endl;
     return 0;
 }
