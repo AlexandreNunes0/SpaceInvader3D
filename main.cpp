@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <iostream>
-#include <map> 
+#include <map>
 
 // OpenGL Extension Wrangler
 #include <GL/glew.h>
@@ -29,6 +29,16 @@ using namespace glm;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+// Cache structure to hold parsed OBJ data
+struct ObjCache {
+    std::vector<glm::vec3> vertices;
+    std::vector<glm::vec2> uvs;
+    std::vector<glm::vec3> normals;
+    std::vector<tinyobj::material_t> materials;
+    std::vector<std::string> textures;
+    std::vector<GLuint> textureIDs;
+};
+
 // GameObject structure
 struct GameObject {
     std::string objFile;
@@ -50,9 +60,11 @@ struct GameObject {
 // Texture cache to avoid reloading the same texture multiple times
 std::map<std::string, GLuint> textureCache;
 
+// Cache to store parsed OBJ data
+std::map<std::string, ObjCache> objCache;
+
 // Function to load textures and cache them
 GLuint loadTexture(const std::string& texturePath) {
-    // Check if the texture is already loaded
     if (textureCache.find(texturePath) != textureCache.end()) {
         std::cout << "Texture already loaded: " << texturePath << std::endl;
         return textureCache[texturePath];
@@ -101,6 +113,21 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
     std::vector<std::string>& out_textures,
     std::vector<GLuint>& out_textureIDs) {
 
+    // Check if the OBJ file is already cached
+    auto it = objCache.find(objpath);
+    if (it != objCache.end()) {
+        // Use cached data
+        const ObjCache& cache = it->second;
+        out_vertices = cache.vertices;
+        out_uvs = cache.uvs;
+        out_normals = cache.normals;
+        out_materials = cache.materials;
+        out_textures = cache.textures;
+        out_textureIDs = cache.textureIDs;
+        return true;
+    }
+
+    // Proceed with loading the OBJ file if not cached
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -172,6 +199,16 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         }
     }
 
+    // Cache the loaded data
+    ObjCache cache;
+    cache.vertices = out_vertices;
+    cache.uvs = out_uvs;
+    cache.normals = out_normals;
+    cache.materials = out_materials;
+    cache.textures = out_textures;
+    cache.textureIDs = out_textureIDs;
+    objCache[objpath] = cache;
+
     std::cout << "OBJ file loaded successfully.\n";
     return true;
 }
@@ -202,8 +239,14 @@ void loadGameObject(GameObject& obj) {
     glBindBuffer(GL_ARRAY_BUFFER, obj.normalBuffer);
     glBufferData(GL_ARRAY_BUFFER, obj.normals.size() * sizeof(glm::vec3), &obj.normals[0], GL_STATIC_DRAW);
 
-    std::cout << "GameObject buffers created successfully.\n";
+    // Set up texture IDs
+    for (GLuint textureID : obj.textureIDs) {
+        if (textureID != 0) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+        }
+    }
 }
+
 
 // Main loop to render objects
 int main(void) {
