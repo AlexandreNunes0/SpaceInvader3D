@@ -81,7 +81,7 @@ GLuint loadTexture(const std::string& texturePath) {
     unsigned char* data = stbi_load(texturePath.c_str(), &width, &height, &channels, 0);
     if (!data) {
         DEBUG_PRINT("Failed to load texture: " << texturePath);
-        DEBUG_PRINT("stbi_error: " << stbi_failure_reason() );
+        DEBUG_PRINT("stbi_error: " << stbi_failure_reason());
         return 0;
     }
 
@@ -106,7 +106,7 @@ GLuint loadTexture(const std::string& texturePath) {
 
     textureCache[texturePath] = textureID;  // Cache the loaded texture
 
-    DEBUG_PRINT("Successfully loaded texture: " << texturePath );
+    DEBUG_PRINT("Successfully loaded texture: " << texturePath);
     return textureID;
 }
 
@@ -139,7 +139,7 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    DEBUG_PRINT("Loading OBJ file: " << objpath );
+    DEBUG_PRINT("Loading OBJ file: " << objpath);
     bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, objpath, mtlpath);
 
     if (!warn.empty()) {
@@ -162,7 +162,7 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
         if (!material.diffuse_texname.empty()) {
             std::string fullTexturePath = mtlFolderPath + "/" + material.diffuse_texname;
             out_textures.push_back(fullTexturePath);
-            DEBUG_PRINT("Found texture: " << fullTexturePath );
+            DEBUG_PRINT("Found texture: " << fullTexturePath);
         }
         else {
             out_textures.push_back("");
@@ -221,9 +221,9 @@ bool OBJloadingfunction(const char* objpath, const char* mtlpath,
 
 // Function to load game object data and initialize buffers
 void loadGameObject(GameObject& obj) {
-    DEBUG_PRINT( "Loading GameObject: " << obj.objFile );
+    DEBUG_PRINT("Loading GameObject: " << obj.objFile);
     if (!OBJloadingfunction(obj.objFile.c_str(), obj.mtlFile.c_str(), obj.vertices, obj.uvs, obj.normals, obj.materials, obj.textures, obj.textureIDs)) {
-        DEBUG_PRINT("Failed to load GameObject: " << obj.objFile );
+        DEBUG_PRINT("Failed to load GameObject: " << obj.objFile);
         return;
     }
 
@@ -268,7 +268,7 @@ void createMothership(GameObject& motherShip) {
     DEBUG_PRINT("Creating mothership...");
     motherShip.objFile = "obj/mothership.obj";
     motherShip.mtlFile = "obj";
-    motherShip.position = glm::vec3( 1.0f, 12.0f, 0.0f);  
+    motherShip.position = glm::vec3(1.0f, 12.0f, 0.0f);
     loadGameObject(motherShip);
     DEBUG_PRINT("Mothership created");
 }
@@ -301,7 +301,7 @@ void createAliens(std::vector<GameObject>& aliens_vector) {
         }
     }
 
-    DEBUG_PRINT("Aliens created: " << aliens_vector.size() );
+    DEBUG_PRINT("Aliens created: " << aliens_vector.size());
 }
 
 // Function to initialize the game objects (Player, Mothership, Aliens)
@@ -422,7 +422,65 @@ void updateAlienPositions(std::vector<GameObject>& aliens_vector) {
     }
 }
 
+// Function to clean up OpenGL resources for a GameObject
+void cleanupGameObject(GameObject& obj) {
+    DEBUG_PRINT("Cleaning up GameObject: " << obj.objFile);
 
+    // Delete OpenGL buffers
+    if (obj.vertexBuffer) {
+        glDeleteBuffers(1, &obj.vertexBuffer);
+        obj.vertexBuffer = 0;
+    }
+    if (obj.uvBuffer) {
+        glDeleteBuffers(1, &obj.uvBuffer);
+        obj.uvBuffer = 0;
+    }
+    if (obj.normalBuffer) {
+        glDeleteBuffers(1, &obj.normalBuffer);
+        obj.normalBuffer = 0;
+    }
+
+    // Delete VAO
+    if (obj.vertexArrayID) {
+        glDeleteVertexArrays(1, &obj.vertexArrayID);
+        obj.vertexArrayID = 0;
+    }
+
+    // Clear texture IDs
+    for (GLuint& textureID : obj.textureIDs) {
+        if (textureID) {
+            glDeleteTextures(1, &textureID);
+            textureID = 0;
+        }
+    }
+}
+
+// General cleanup function to clear all resources
+void cleanup(std::vector<GameObject>& aliens, GameObject& playerShip, GameObject& motherShip) {
+    // Cleanup aliens
+    for (auto& alien : aliens) {
+        cleanupGameObject(alien);
+    }
+    aliens.clear();
+
+    // Cleanup player ship
+    cleanupGameObject(playerShip);
+
+    // Cleanup mothership
+    cleanupGameObject(motherShip);
+
+    // Clear OpenGL texture cache
+    for (auto it = textureCache.begin(); it != textureCache.end(); ++it) {
+        GLuint textureID = it->second;
+        glDeleteTextures(1, &textureID);
+    }
+    textureCache.clear();
+
+    // Clear object cache
+    objCache.clear();
+
+    DEBUG_PRINT("Cleanup complete.");
+}
 
 
 
@@ -500,14 +558,8 @@ int main(void) {
 
         handlePlayerMovement(playerShip, deltaTime);
 
-            updateAlienPositions(aliens_vector);
+        updateAlienPositions(aliens_vector);
 
-
-        // Render each alien dynamically
-        for (auto& alien : aliens_vector) {
-            alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position);
-            renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
-        }
 
         // Render player ship
         playerShip.modelMatrix = glm::translate(glm::mat4(1.0f), playerShip.position);
@@ -517,12 +569,25 @@ int main(void) {
         motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position);
         renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
 
+        // Render each alien dynamically
+        for (auto& alien : aliens_vector) {
+            alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position);
+            renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+        }
+
+
         glfwSwapBuffers(window);
         glfwPollEvents();
 
     } while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS &&
         glfwWindowShouldClose(window) == 0);
 
+
+    cleanup(aliens_vector, playerShip, motherShip);
+
+
+
+    glDeleteProgram(programID);
     glfwTerminate();
     return 0;
 }
