@@ -364,7 +364,63 @@ void renderObject(const GameObject& obj, GLuint MatrixID, GLuint ModelMatrixID, 
 
 
 
+// Constants for player movement
+const float PLAYER_SPEED = 5.0f; // Adjust for desired speed
+const float PLAYER_BOUNDARY_LEFT = -10.0f; // Adjust to your scene boundary
+const float PLAYER_BOUNDARY_RIGHT = 10.0f;  // Adjust to your scene boundary
 
+// Function to handle player movement
+void handlePlayerMovement(GameObject& player, float deltaTime) {
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        player.position.x -= PLAYER_SPEED * deltaTime;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        player.position.x += PLAYER_SPEED * deltaTime;
+    }
+
+    // Ensure player stays within boundaries
+    if (player.position.x < PLAYER_BOUNDARY_LEFT) {
+        player.position.x = PLAYER_BOUNDARY_LEFT;
+    }
+    if (player.position.x > PLAYER_BOUNDARY_RIGHT) {
+        player.position.x = PLAYER_BOUNDARY_RIGHT;
+    }
+}
+
+float alienSpeed = 0.02f;  // Speed of alien movement
+float alienBoundaryLeft = -10.0f;  // Left boundary
+float alienBoundaryRight = 10.0f;  // Right boundary
+bool alienMovingRight = true;  // Current direction of aliens
+float alienDropDistance = 0.5f;  // Distance to move down when hitting a boundary
+
+
+void updateAlienPositions(std::vector<GameObject>& aliens_vector) {
+    bool hitBoundary = false;
+
+    // Check for boundary collision
+    for (auto& alien : aliens_vector) {
+        if (alienMovingRight && alien.position.x > alienBoundaryRight) {
+            hitBoundary = true;
+        }
+        if (!alienMovingRight && alien.position.x < alienBoundaryLeft) {
+            hitBoundary = true;
+        }
+    }
+
+    // If a boundary is hit, reverse direction and move down
+    if (hitBoundary) {
+        alienMovingRight = !alienMovingRight;  // Reverse direction
+        for (auto& alien : aliens_vector) {
+            alien.position.y -= alienDropDistance;  // Move down
+        }
+    }
+
+    // Update positions based on the direction
+    float direction = alienMovingRight ? 1.0f : -1.0f;
+    for (auto& alien : aliens_vector) {
+        alien.position.x += alienSpeed * direction;
+    }
+}
 
 
 
@@ -423,14 +479,29 @@ int main(void) {
     // Initialize all game objects (player, mothership, aliens)
     initializeGameObjects(aliens_vector, playerShip, motherShip);
 
+
+    double lastTime = glfwGetTime();
+
     // Main render loop
     do {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(programID);
 
+
+        // Calculate deltaTime for smooth movement
+        double currentTime = glfwGetTime();
+        float deltaTime = static_cast<float>(currentTime - lastTime);
+        lastTime = currentTime;
+
         computeMatricesFromInputs();
         glm::mat4 ProjectionMatrix = getProjectionMatrix();
         glm::mat4 ViewMatrix = getViewMatrix();
+
+
+        handlePlayerMovement(playerShip, deltaTime);
+
+            updateAlienPositions(aliens_vector);
+
 
         // Render each alien dynamically
         for (auto& alien : aliens_vector) {
