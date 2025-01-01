@@ -63,7 +63,7 @@ const float mothershipSpeed = 0.05f; // Speed at which the mothership moves hori
 //Player Related
 const float PLAYER_SPEED = 20.0f;  // Speed at which the player can move
 double lastShotTime = 0.0f;        // Stores the time when the last shot was fired (for cooldown purposes)
-const float SHOT_COOLDOWN = 0.5f;  // Cooldown duration for shooting (0.5 seconds)
+const float SHOT_COOLDOWN = 0.3f;  // Cooldown duration for shooting
 
 
 // Define the structure to hold the cached data for OBJ modles
@@ -112,6 +112,7 @@ struct Laser
     glm::vec3 direction = glm::vec3(0.0f, 1.0f, 0.0f); // Direction the laser moves in (default is upwards)
     float speed = 10.0f;                               // Speed at which the laser moves
     bool active = false;                               // Whether the laser is active and should be rendered or not
+    bool player_friendly = true;                       // To specify if they are player (true) or alien frindly(false)
 
     GameObject obj;                                   // The laser itself is also a GameObject, allowing it to have geometry and a model
 };
@@ -376,7 +377,7 @@ void createPlayer(GameObject& playerShip)
     playerShip.mtlFile = "obj";  // Same texture folder as other objects
 
     // Set the player's initial position in the game world
-    playerShip.position = glm::vec3(2.0f, -22.0f, 0.0f); // Position the player lower in the scene
+    playerShip.position = glm::vec3(0.0f, -35.0f, 0.0f); // Position the player lower in the scene
 
     // Generate a unique ID for the player
     playerShip.id = generateUniqueID();
@@ -405,7 +406,7 @@ void createMothership(GameObject& motherShip)
     motherShip.mtlFile = "obj"; // Assuming same texture folder as other objects
 
     // Set the mothership's initial position in the game world
-    motherShip.position = glm::vec3(1.0f, 12.0f, 0.0f);
+    motherShip.position = glm::vec3(0.0f, 32.0f, 0.0f);
 
     // Generate a unique ID for the mothership
     motherShip.id = generateUniqueID();
@@ -430,15 +431,39 @@ void createMothership(GameObject& motherShip)
 
 //-------------------------------------------------------------------------------------------------
 // Function to create a laser
-void createLaser(Laser& laser, const glm::vec3& startPos)
+void createLaser(Laser& laser, const glm::vec3& playerPosition, const glm::vec3& startPos, bool player_shot, const glm::vec3& alienPosition = glm::vec3(0.0f, 0.0f, 0.0f))
 {
     // Set the laser's position in the game world (starts from the player's ship)
     laser.obj.position = startPos;
 
     // Set the laser's object file and material file for loading
     laser.obj.objFile = "obj/laser.obj";
-    laser.obj.type = "Laser"; // Set the object type as "Laser"
     laser.obj.mtlFile = "obj"; // Same texture folder as other objects
+
+    if (player_shot == true)
+    {
+        laser.player_friendly = true; // Set as Player Ally
+        laser.obj.type = "Player Laser"; // Set the object type as " Player Laser"
+        laser.direction = glm::vec3(0.0f, 1.0f, 0.0f); // Laser moves upwards
+    }
+    else if (player_shot == false)
+    {
+        laser.player_friendly = false; // Set as Player Enemy
+        laser.obj.type = "Enemy Laser"; // Set the object type as "Alien Laser"
+
+        if (alienPosition != glm::vec3(0.0f, 0.0f, 0.0f))
+        {
+            // Calculate the direction from the alien to the player if alien position is provided
+            glm::vec3 directionToPlayer = playerPosition - alienPosition; // Vector from alien to player
+            laser.direction = glm::normalize(directionToPlayer); // Normalize the vector to get direction
+        }
+        else
+        {
+            // Default direction if no alien position is provided (e.g., laser fired from player)
+            laser.direction = glm::vec3(0.0f, -1.0f, 0.0f); // Move upwards by default
+        }
+
+    }
 
     // Load the laser object data
     loadGameObject(laser.obj);
@@ -450,7 +475,7 @@ void createLaser(Laser& laser, const glm::vec3& startPos)
 
 //-------------------------------------------------------------------------------------------------
 // Function to create aliens dynamically with flexibility
-void createAliens(std::vector<GameObject>& aliens_vector, int rows = 5, int cols = 4, float spacing = 5.0f, const glm::vec3& startPos = glm::vec3(-6.0f, 4.0f, 0.0f))
+void createAliens(std::vector<GameObject>& aliens_vector, int rows = 5, int cols = 4, float spacing = 5.0f, const glm::vec3& startPos = glm::vec3(0.0f, 25.0f, 0.0f))
 {
     // Define an array of alien models to be assigned dynamically to aliens
     std::vector<std::string> alienModels = { "obj/alien1.obj", "obj/alien2.obj", "obj/alien3.obj" };
@@ -495,7 +520,7 @@ void initializeGameObjects(std::vector<GameObject>& aliens_vector, GameObject& p
     // Call functions to create the player ship, mothership, and alien swarm
     createPlayer(playerShip);
     createMothership(motherShip);
-    createAliens(aliens_vector, 6, 5, 5.0f, glm::vec3(-8.0f, 5.0f, 0.0f)); // Initialize 6 rows and 5 columns of aliens
+    createAliens(aliens_vector, 6, 6); // Initialize 6 rows and 5 columns of aliens
 }
 
 
@@ -670,7 +695,7 @@ void handlePlayerMovement(GameObject& player, float deltaTime)
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && (glfwGetTime() - lastShotTime) >= SHOT_COOLDOWN)
     {
         Laser newLaser;
-        createLaser(newLaser, player.position + glm::vec3(0.0f, 2.0f, 0.0f)); // Fire laser above the player
+        createLaser(newLaser, player.position, player.position + glm::vec3(0.0f, 2.0f, 0.0f), true); // Fire laser above the player
         lasers.push_back(newLaser); // Add new laser to the lasers array
         lastShotTime = glfwGetTime(); // Update last shot time for cooldown management
     }
@@ -746,14 +771,18 @@ void updateLaser(Laser& laser, float deltaTime)
     if (!laser.active)
         return; // Skip if laser is inactive
 
+
     // Move the laser in its direction based on speed and delta time
     laser.obj.position += laser.direction * laser.speed * deltaTime;
 
-    // Deactivate laser if it moves off the screen (y-axis exceeds a certain limit)
-    if (laser.obj.position.y > 35.0f)
+
+
+    // Deactivate laser if it moves off the screen (y-axis or x-axis exceeds a certain limit)
+    if (laser.obj.position.y > 35.0f || laser.obj.position.y < -35.0f || laser.obj.position.x > 55.0f || laser.obj.position.x < -55.0f)
     {
         laser.active = false; // Laser is no longer active
     }
+
 }
 
 
@@ -775,6 +804,13 @@ void renderLaser(Laser& laser, GLuint MatrixID, GLuint ModelMatrixID, GLuint Vie
 // Function to check if a laser collides with an alien
 bool checkLaserAlienCollision(const Laser& laser, GameObject& alien)
 {
+
+    if (laser.player_friendly == false)
+    {
+        return false; // Skip if laser is friendly to object
+    }
+
+
     // Calculate the distance between the laser and the alien
     float distance = glm::length(laser.obj.position - alien.position);
 
@@ -825,6 +861,12 @@ void handleLaserAlienCollisions(std::vector<GameObject>& aliens)
 // Function to check if a laser collides with the mothership
 bool checkLaserMothershipCollision(const Laser& laser, GameObject& motherShip)
 {
+
+    if (laser.player_friendly == false)
+    {
+        return false; // Skip if laser is friendly to object
+    }
+
     if (!mothershipAlive)
         return false; // Skip if mothership is not alive
 
@@ -878,6 +920,40 @@ void handleLaserMothershipCollision(GameObject& mothership)
 }
 
 
+
+//-------------------------------------------------------------------------------------------------
+// Function to handle alien laser firing
+void handleAlienLaserFiring(std::vector<GameObject>& aliens_vector, const glm::vec3& playerPosition, int value, GameObject& player)
+{
+    for (auto& alien : aliens_vector)
+    {
+        // Random chance for each alien to fire
+        if (rand() % 150000 < value) //  chance for each alien to fire 
+        {
+            Laser newLaser;
+            createLaser(newLaser, player.position, alien.position + glm::vec3(0.0f, -2.0f, 0.0f), false, alien.position);
+            lasers.push_back(newLaser); // Add new laser to the lasers array
+
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+// Function to handle mothership laser firing
+void handleMothershipLaserFiring(GameObject& motherShip, int value, GameObject& player)
+{
+    // Random chance for mothership to fire
+    if (rand() % 300 < value) //  chance for mothership to fire 
+    {
+        Laser newLaser;
+        createLaser(newLaser, player.position, motherShip.position + glm::vec3(0.0f, -2.0f, 0.0f), false);
+        lasers.push_back(newLaser); // Add laser to the list of lasers
+    }
+}
+
+
+
+
 //-------------------------------------------------------------------------------------------------
 // Main function that runs the program
 int main(void)
@@ -920,13 +996,13 @@ int main(void)
     glfwSetCursorPos(window, 1920 / 2, 1080 / 2); // Position the cursor at the center of the window
 
     // OpenGL settings
-    glClearColor(0.4f, 0.4f, 0.4f, 0.0f); // Set background color
+    glClearColor(0.15f, 0.15f, 0.15f, 0.0f); // Set background color
     glEnable(GL_DEPTH_TEST); // Enable depth testing for 3D rendering
     glDepthFunc(GL_LESS); // Use less than comparison for depth testing
     glEnable(GL_CULL_FACE); // Enable face culling (only render front faces)
 
     // Load shaders (vertex and fragment shaders)
-    GLuint programID = LoadShaders("TransformVertexShader.vertexshader", "TextureFragmentShader.fragmentshader");
+    GLuint programID = LoadShaders("main.vertexshader", "main.fragmentshader");
     DEBUG_PRINT("Shaders loaded successfully!");
     DEBUG_PRINT("-----------------------------------------");
 
@@ -944,6 +1020,10 @@ int main(void)
     initializeGameObjects(aliens_vector, playerShip, motherShip);
 
     double lastTime = glfwGetTime(); // Store the initial time for deltaTime calculations
+
+    int alien_laser_timer = 1;
+    int mothership_laser_timer = 5;
+
 
     // Main game loop
     do
@@ -979,6 +1059,17 @@ int main(void)
             motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position); // Update model matrix
             motherShip.modelMatrix = glm::scale(motherShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f)); // Scale mothership
             renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render mothership
+
+
+            // Handle mothership laser firing
+            handleMothershipLaserFiring(motherShip, mothership_laser_timer, playerShip);
+
+
+
+            // Handle laser-mothership collisions
+            handleLaserMothershipCollision(motherShip);
+
+
         }
 
         // Render each alien dynamically
@@ -986,13 +1077,16 @@ int main(void)
         {
             alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position); // Update alien position
             renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render alien
+
+
+            // Handle laser-alien collisions
+            handleLaserAlienCollisions(aliens_vector);
+
+            // Handle alien laser firing
+            handleAlienLaserFiring(aliens_vector, playerShip.position, alien_laser_timer, playerShip);
+
+
         }
-
-        // Handle laser-alien collisions
-        handleLaserAlienCollisions(aliens_vector);
-
-        // Handle laser-mothership collisions
-        handleLaserMothershipCollision(motherShip);
 
         // Update and render lasers
         for (auto& laser : lasers)
@@ -1019,3 +1113,6 @@ int main(void)
     glfwTerminate(); // Terminate GLFW
     return 0; // Exit the program
 }
+
+
+
