@@ -16,10 +16,10 @@ float initialFoV = 45.0f;
 float speed = 10.0f;
 float mouseSpeed = 0.005f;
 
-int cameraMode = 3;  // Default to Free Camera Mode
+int cameraMode = 1;  // Default to First Person Camera 
 
 // Camera offset for Mode 1 (Player-Focused View)
-glm::vec3 cameraOffset = glm::vec3(0.0f, 2.0f, -5.0f);  // Fixed offset behind and slightly above the player model
+glm::vec3 cameraOffset = glm::vec3(0.0f, 2.0f, 5.0f);  // Fixed offset behind and slightly above the player model
 
 glm::mat4 getViewMatrix() {
     return ViewMatrix;
@@ -28,6 +28,7 @@ glm::mat4 getViewMatrix() {
 glm::mat4 getProjectionMatrix() {
     return ProjectionMatrix;
 }
+
 
 
 void computeMatricesFromInput(glm::vec3& playerPosition) {
@@ -39,10 +40,17 @@ void computeMatricesFromInput(glm::vec3& playerPosition) {
     // Get mouse position and handle movement (same as before)
     double xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
-    glfwSetCursorPos(window, 1024 / 2, 768 / 2);
 
-    horizontalAngle += mouseSpeed * float(1024 / 2 - xpos);
-    verticalAngle += mouseSpeed * float(768 / 2 - ypos);
+    // Update the mouse position for first-person and static modes
+    if (cameraMode == 3) {  // Free camera mode: Mouse moves the camera
+        glfwSetCursorPos(window, 1024 / 2, 768 / 2);  // Reset mouse to center
+
+        horizontalAngle += mouseSpeed * float(1024 / 2 - xpos);
+        verticalAngle += mouseSpeed * float(768 / 2 - ypos);
+
+        // Hide the cursor in free camera mode but allow mouse movement
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
 
     glm::vec3 direction(
         cos(verticalAngle) * sin(horizontalAngle),
@@ -89,16 +97,34 @@ void computeMatricesFromInput(glm::vec3& playerPosition) {
 
     // Handle each camera mode
     if (cameraMode == 1) {  // Player-Focused View (Camera follows the player)
-        // Camera follows the player and is positioned at the player's current location
-        ViewMatrix = glm::lookAt(playerPosition, playerPosition + direction, up);  // Camera looks where the player is facing
+        // Camera position is slightly behind and above the player
+        glm::vec3 cameraOffset = glm::vec3(0.0f, -10.0f, 5.0f);  // Camera is behind and slightly above the player
+        position = playerPosition + cameraOffset;  // Set the camera position relative to player
+
+        // Camera will look slightly upwards from the player's position while still seeing the player model
+        // Adjusting the look-at target to be slightly higher, so it looks from behind upwards
+        glm::vec3 lookAtTarget = playerPosition + glm::vec3(0.0f, 1.5f, 0.0f);  // A little higher than the player's center
+
+        // Setting the view matrix to look at the adjusted target
+        ViewMatrix = glm::lookAt(position, lookAtTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // Disable mouse cursor in Mode 1
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
+
     else if (cameraMode == 2) {  // Static Position View (Top-Down view of the game board)
-        position = glm::vec3(0.0f, 50.0f, 0.0f);  // Fixed position above the game board
+        position = glm::vec3(0.0f, 20.0f, 90.0f);  // Fixed position 
         ViewMatrix = glm::lookAt(position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
         // Looking directly down towards the center of the board
+
+        // Disable mouse cursor in Mode 2
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
     else {  // Free Camera Mode (Unchanged)
         ViewMatrix = glm::lookAt(position, position + direction, up);
+
+        // Hide the cursor and allow mouse movement in Mode 3
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
     lastTime = currentTime;
