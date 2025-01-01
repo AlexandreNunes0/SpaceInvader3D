@@ -16,12 +16,12 @@ uniform mat4 MV;                         // Model-View matrix.
 uniform vec3 LightPositions_worldspace[5]; // Array of light positions in world space.
 
 // Light emission properties.
-vec3 LightColor = vec3(1.0, 0.75, 0.135); // The color of the light (e.g., warm yellow).
-float LightPower = 200.0f;                // Intensity of the light source.
+vec3 LightColor = vec3(1.0, 1.0, 1.0); // The color of the light (e.g., warm yellow).
+float LightPower = 500.0f;                // Intensity of the light source.
 
 // Material properties for the surface.
 vec3 MaterialDiffuseColor = texture(myTextureSampler, UV).rgb;         // Surface diffuse color sampled from the texture.
-vec3 MaterialAmbientColor = vec3(0.1, 0.1, 0.1) * MaterialDiffuseColor; // Ambient color contribution based on the diffuse color.
+vec3 MaterialAmbientColor = vec3(0.3, 0.3, 0.3) * MaterialDiffuseColor; // Ambient color contribution based on the diffuse color.
 vec3 MaterialSpecularColor = vec3(0.3, 0.3, 0.3);                       // Specular highlight color for the surface.
 
 /**

@@ -123,6 +123,24 @@ std::map<std::string, ObjCache> objCache;  // Maps object file paths to their co
 // Declare a vector to hold all active lasers in the game
 std::vector<Laser> lasers;  // Vector containing all active lasers (both player and enemy lasers)
 
+enum GameState {
+    GAME_START,
+    GAME_PLAYING,
+    GAME_PAUSED,
+    GAME_OVER,
+    NEW_LEVEL
+};
+
+GameState currentState = GAME_START; // Initially, the game starts in the start state
+
+// Define the structure to represent a shield object
+struct Shield
+{
+    GameObject obj;      // The shield itself is also a GameObject
+    int health = 10;     // Health of the shield
+    
+};
+
 
 //-------------------------------------------------------------------------------------------------
 // Function to load textures and cache them to avoid reloading the same texture multiple times
@@ -395,6 +413,40 @@ void createPlayer(GameObject& playerShip)
 
 
 //-------------------------------------------------------------------------------------------------
+Shield createShield(const glm::vec3& position, int health)
+{
+    Shield shield;
+
+    // Set the shield's object file and material file for loading
+    shield.obj.objFile = "obj/shield.obj";
+    shield.obj.mtlFile = "obj"; // Same texture folder as other objects
+
+    // Set the shield's initial position in the game world
+    shield.obj.position = position;
+
+    // Generate a unique ID for the shield
+    shield.obj.id = generateUniqueID();
+
+    // Set the shield type to "Shield"
+    shield.obj.type = "Shield";
+
+    // Set the shield's initial health
+    shield.health = health; // Example health value
+
+    // Load the shield object data
+    loadGameObject(shield.obj);
+
+    // Log the successful creation of the shield with its unique ID
+    DEBUG_PRINT("Shield created with ID: " << shield.obj.id);
+    DEBUG_PRINT("-----------------------------------------");
+
+    return shield;
+}
+
+
+
+
+//-------------------------------------------------------------------------------------------------
 // Function to load the mothership
 void createMothership(GameObject& motherShip)
 {
@@ -406,7 +458,7 @@ void createMothership(GameObject& motherShip)
     motherShip.mtlFile = "obj"; // Assuming same texture folder as other objects
 
     // Set the mothership's initial position in the game world
-    motherShip.position = glm::vec3(0.0f, 32.0f, 0.0f);
+    motherShip.position = glm::vec3(0.0f, 30.0f, 0.0f);
 
     // Generate a unique ID for the mothership
     motherShip.id = generateUniqueID();
@@ -515,27 +567,34 @@ void createAliens(std::vector<GameObject>& aliens_vector, int rows = 5, int cols
 
 //-------------------------------------------------------------------------------------------------
 // Function to initialize the game objects (Player, Mothership, Aliens)
-void initializeGameObjects(std::vector<GameObject>& aliens_vector, GameObject& playerShip, GameObject& motherShip)
+void initializeGameObjects(std::vector<GameObject>& aliens_vector, GameObject& playerShip, GameObject& motherShip, std::vector<Shield>& shields,int rowALiens,int ColAliens,int shieldhealth)
 {
-    // Call functions to create the player ship, mothership, and alien swarm
     createPlayer(playerShip);
     createMothership(motherShip);
-    createAliens(aliens_vector, 6, 6); // Initialize 6 rows and 5 columns of aliens
+    createAliens(aliens_vector, rowALiens, ColAliens); // Initialize 6 rows and 5 columns of aliens
+
+    // Create shields at specific positions
+    shields.push_back(createShield(glm::vec3(-30.0f, -20.0f, 0.0f),shieldhealth));
+    shields.push_back(createShield(glm::vec3(0.0f, -20.0f, 0.0f), shieldhealth));
+    shields.push_back(createShield(glm::vec3(30.0f, -20.0f, 0.0f), shieldhealth));
 }
+
+
 
 
 //-------------------------------------------------------------------------------------------------
 // Function to render any game object
-void renderObject(const GameObject& obj, GLuint MatrixID, GLuint ModelMatrixID, GLuint ViewMatrixID, GLuint textureID, const glm::mat4& ProjectionMatrix, const glm::mat4& ViewMatrix)
+void renderObject(const GameObject& obj, GLuint MatrixID, GLuint ModelMatrixID, GLuint ViewMatrixID, GLuint textureID, const glm::mat4& ProjectionMatrix, const glm::mat4& ViewMatrix, float scale = 1.0f)
 {
     // Set up the Model-View-Projection (MVP) matrix by multiplying the projection, view, and model matrices
-    glm::mat4 MVP = ProjectionMatrix * ViewMatrix * obj.modelMatrix;
+    glm::mat4 ModelMatrix = glm::scale(obj.modelMatrix, glm::vec3(scale, scale, scale));
+    glm::mat4 MVP = ProjectionMatrix * ViewMatrix * ModelMatrix;
 
     // Send the MVP transformation matrix to the shader for rendering
     glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
 
     // Send the individual model matrix to the shader
-    glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &obj.modelMatrix[0][0]);
+    glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &ModelMatrix[0][0]);
 
     // Send the view matrix to the shader
     glUniformMatrix4fv(ViewMatrixID, 1, GL_FALSE, &ViewMatrix[0][0]);
@@ -583,6 +642,7 @@ void renderObject(const GameObject& obj, GLuint MatrixID, GLuint ModelMatrixID, 
 }
 
 
+
 //-------------------------------------------------------------------------------------------------
 // Function to clean up OpenGL resources for a GameObject
 void cleanupGameObject(GameObject& obj)
@@ -628,7 +688,7 @@ void cleanupGameObject(GameObject& obj)
 
 //-------------------------------------------------------------------------------------------------
 // General cleanup function to clear all resources
-void cleanup(std::vector<GameObject>& aliens, GameObject& playerShip, GameObject& motherShip)
+void cleanup(std::vector<GameObject>& aliens, GameObject& playerShip, GameObject& motherShip, std::vector<Shield>& shields)
 {
     // Start of the cleanup process
     DEBUG_PRINT("-----------------------------------------");
@@ -655,6 +715,14 @@ void cleanup(std::vector<GameObject>& aliens, GameObject& playerShip, GameObject
         cleanupGameObject(laser.obj); // Clean up the laser objects
     }
     lasers.clear(); // Clear the laser vector
+
+    // Clean up shields and clear their vector
+    for (auto& shield : shields)
+    {
+        cleanupGameObject(shield.obj); // Clean up the shield objects
+    }
+    shields.clear(); // Clear the shield vector
+
 
     // Clear the object cache to free up memory
     objCache.clear();
@@ -868,8 +936,9 @@ bool checkLaserMothershipCollision(const Laser& laser, GameObject& motherShip)
     }
 
     if (!mothershipAlive)
+    {
         return false; // Skip if mothership is not alive
-
+    }
     // Calculate the distance between the laser and the mothership
     float distance = glm::length(laser.obj.position - motherShip.position);
 
@@ -920,7 +989,6 @@ void handleLaserMothershipCollision(GameObject& mothership)
 }
 
 
-
 //-------------------------------------------------------------------------------------------------
 // Function to handle alien laser firing
 void handleAlienLaserFiring(std::vector<GameObject>& aliens_vector, const glm::vec3& playerPosition, int value, GameObject& player)
@@ -938,6 +1006,7 @@ void handleAlienLaserFiring(std::vector<GameObject>& aliens_vector, const glm::v
     }
 }
 
+
 //-------------------------------------------------------------------------------------------------
 // Function to handle mothership laser firing
 void handleMothershipLaserFiring(GameObject& motherShip, int value, GameObject& player)
@@ -950,6 +1019,131 @@ void handleMothershipLaserFiring(GameObject& motherShip, int value, GameObject& 
         lasers.push_back(newLaser); // Add laser to the list of lasers
     }
 }
+
+
+bool checkLaserShieldCollision(const Laser& laser, Shield& shield)
+{
+    if (!laser.active)
+        return false; // Skip if laser is inactive
+
+    // Calculate the distance between the laser and the shield
+    float distance = glm::length(laser.obj.position - shield.obj.position);
+
+    // Define a threshold for collision detection (can adjust as necessary)
+    float threshold = 6.5f;
+
+    // Return true if laser collides with the shield
+    return distance < threshold;
+}
+
+void handleLaserShieldCollisions(std::vector<Shield>& shields)
+{
+    for (auto laserIt = lasers.begin(); laserIt != lasers.end();)
+    {
+        if (!laserIt->active)
+        {
+            laserIt = lasers.erase(laserIt); // Remove inactive lasers
+        }
+        else
+        {
+            for (auto shieldIt = shields.begin(); shieldIt != shields.end();)
+            {
+                if (checkLaserShieldCollision(*laserIt, *shieldIt))
+                {
+                    if (laserIt->player_friendly == true)
+                    {
+                        // If the laser is friendly, deactivate the laser without affecting shield health
+                        laserIt->active = false;
+                    }
+                    else
+                    {
+
+                        shieldIt->health -= 1; // Decrease shield health on hit
+                        laserIt->active = false; // Deactivate the laser after collision
+
+                        if (shieldIt->health <= 0)
+                        {
+                            cleanupGameObject(shieldIt->obj); // Clean up shield resources
+                            shieldIt = shields.erase(shieldIt); // Remove shield if health is depleted
+                        }
+                        else
+                        {
+                            ++shieldIt; // Move to the next shield
+                        }
+                    }
+                    break; // Stop checking once a laser hits a shield
+                }
+                else
+                {
+                    ++shieldIt; // Move to the next shield
+                }
+            }
+
+            ++laserIt; // Move to the next laser
+        }
+    }
+}
+
+
+
+void handleGameStates() {
+    // Detect "P" key press and release for pausing/unpausing
+    static bool pKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+        if (!pKeyPressed) {
+            if (currentState == GAME_PLAYING) {
+                currentState = GAME_PAUSED;  // Pause the game
+            }
+            else if (currentState == GAME_PAUSED) {
+                currentState = GAME_PLAYING; // Unpause the game
+            }
+            pKeyPressed = true; // Flag that the key is pressed
+        }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE) {
+        pKeyPressed = false; // Reset the flag when the key is released
+    }
+
+    // Detect "Enter" key press for starting/continuing the game
+    static bool enterKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS) {
+        if (!enterKeyPressed) {
+            if (currentState == GAME_START) {
+                currentState = GAME_PLAYING;  // Start the game
+            }
+            else if (currentState == NEW_LEVEL) {
+                currentState = GAME_PLAYING; // Start the next level
+            }
+            enterKeyPressed = true; // Flag that the key is pressed
+        }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_RELEASE) {
+        enterKeyPressed = false; // Reset the flag when the key is released
+    }
+
+    // Detect "R" key press for restarting the game
+    static bool rKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS && currentState == GAME_OVER) {
+        if (!rKeyPressed) {
+            currentState = GAME_START; // Restart the game
+            rKeyPressed = true; // Flag that the key is pressed
+        }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_R) == GLFW_RELEASE) {
+        rKeyPressed = false; // Reset the flag when the key is released
+    }
+
+    // Uncomment and use this logic when all aliens are destroyed to transition to a new level:
+    // if (aliens_vector.empty()) {
+    //     currentState = NEW_LEVEL; // Transition to the new level state
+    // }
+}
+
+
+
+
+
+
 
 
 
@@ -996,7 +1190,7 @@ int main(void)
     glfwSetCursorPos(window, 1920 / 2, 1080 / 2); // Position the cursor at the center of the window
 
     // OpenGL settings
-    glClearColor(0.15f, 0.15f, 0.15f, 0.0f); // Set background color
+    glClearColor(0.25f, 0.25f, 0.25f, 0.0f); // Set background color
     glEnable(GL_DEPTH_TEST); // Enable depth testing for 3D rendering
     glDepthFunc(GL_LESS); // Use less than comparison for depth testing
     glEnable(GL_CULL_FACE); // Enable face culling (only render front faces)
@@ -1014,15 +1208,18 @@ int main(void)
 
     // Game objects (player ship, aliens, mothership)
     std::vector<GameObject> aliens_vector;
+    std::vector<Shield> shields;
     GameObject playerShip, motherShip;
 
     // Initialize all game objects (player, mothership, aliens)
-    initializeGameObjects(aliens_vector, playerShip, motherShip);
+    initializeGameObjects(aliens_vector, playerShip, motherShip,shields,6,6,25);
 
     double lastTime = glfwGetTime(); // Store the initial time for deltaTime calculations
 
     int alien_laser_timer = 1;
     int mothership_laser_timer = 5;
+
+
 
 
     // Main game loop
@@ -1031,74 +1228,123 @@ int main(void)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the screen
         glUseProgram(programID); // Use the shader program
 
-        // Calculate deltaTime for smooth movement
-        double currentTime = glfwGetTime(); // Get the current time
-        float deltaTime = static_cast<float>(currentTime - lastTime); // Compute deltaTime
-        lastTime = currentTime; // Update lastTime
-
-        // Calculate the view and projection matrices
-        computeMatricesFromInput(playerShip.position);
-        glm::mat4 ProjectionMatrix = getProjectionMatrix();
-        glm::mat4 ViewMatrix = getViewMatrix();
-
-        // Handle player movement (keyboard input)
-        handlePlayerMovement(playerShip, deltaTime);
-
-        // Update alien positions
-        updateAlienPositions(aliens_vector);
-
-        // Render player ship
-        playerShip.modelMatrix = glm::translate(glm::mat4(1.0f), playerShip.position); // Update model matrix
-        playerShip.modelMatrix = glm::scale(playerShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f)); // Scale player ship
-        renderObject(playerShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render player ship
-
-        // Render mothership only if it's alive
-        if (mothershipAlive)
-        {
-            updateMothershipPosition(motherShip); // Update mothership position
-            motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position); // Update model matrix
-            motherShip.modelMatrix = glm::scale(motherShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f)); // Scale mothership
-            renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render mothership
+        handleGameStates();
 
 
-            // Handle mothership laser firing
-            handleMothershipLaserFiring(motherShip, mothership_laser_timer, playerShip);
+        switch (currentState) {
+
+
+        case GAME_START:
+            // Render the "Start" screen image
+
+            break;
+
+        case GAME_PAUSED:
+            // Render the "Paused" image
+            break;
+
+
+        case NEW_LEVEL:
+            // Render the "New Level" image
+            break;
+
+        case GAME_OVER:
+            // Render the "Game Over" image
+            break;
+
+        case GAME_PLAYING:
+         
+
+            // Calculate the view and projection matrices
+            computeMatricesFromInput(playerShip.position);
+            glm::mat4 ProjectionMatrix = getProjectionMatrix();
+            glm::mat4 ViewMatrix = getViewMatrix();
 
 
 
-            // Handle laser-mothership collisions
-            handleLaserMothershipCollision(motherShip);
+            // Calculate deltaTime for smooth movement
+            double currentTime = glfwGetTime(); // Get the current time
+            float deltaTime = static_cast<float>(currentTime - lastTime); // Compute deltaTime
+            lastTime = currentTime; // Update lastTime
 
 
-        }
+            // Handle player movement (keyboard input)
+            handlePlayerMovement(playerShip, deltaTime);
 
-        // Render each alien dynamically
-        for (auto& alien : aliens_vector)
-        {
-            alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position); // Update alien position
-            renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render alien
+            // Update alien positions
+            updateAlienPositions(aliens_vector);
+
+            // Render player ship
+            playerShip.modelMatrix = glm::translate(glm::mat4(1.0f), playerShip.position); // Update model matrix
+            playerShip.modelMatrix = glm::scale(playerShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f)); // Scale player ship
+            renderObject(playerShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render player ship
+
+            // Render mothership only if it's alive
+            if (mothershipAlive)
+            {
+                updateMothershipPosition(motherShip); // Update mothership position
+                motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position); // Update model matrix
+                motherShip.modelMatrix = glm::scale(motherShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f)); // Scale mothership
+                renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render mothership
 
 
-            // Handle laser-alien collisions
-            handleLaserAlienCollisions(aliens_vector);
-
-            // Handle alien laser firing
-            handleAlienLaserFiring(aliens_vector, playerShip.position, alien_laser_timer, playerShip);
+                // Handle mothership laser firing
+                handleMothershipLaserFiring(motherShip, mothership_laser_timer, playerShip);
 
 
-        }
 
-        // Update and render lasers
-        for (auto& laser : lasers)
-        {
-            updateLaser(laser, deltaTime); // Update laser position
-        }
+                // Handle laser-mothership collisions
+                handleLaserMothershipCollision(motherShip);
 
-        // Render lasers
-        for (auto& laser : lasers)
-        {
-            renderLaser(laser, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render each laser
-        }
+
+            }
+
+            // Render each alien dynamically
+            for (auto& alien : aliens_vector)
+            {
+                alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position); // Update alien position
+                renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render alien
+
+
+                // Handle laser-alien collisions
+                handleLaserAlienCollisions(aliens_vector);
+
+                // Handle alien laser firing
+                handleAlienLaserFiring(aliens_vector, playerShip.position, alien_laser_timer, playerShip);
+
+
+            }
+
+            for (auto& shield : shields)
+            {
+                shield.obj.modelMatrix = glm::translate(glm::mat4(1.0f), shield.obj.position); // Update shield position
+                renderObject(shield.obj, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix,5.0f); // Render shield
+            }
+
+            handleLaserShieldCollisions(shields);
+
+
+            // Update and render lasers
+            for (auto& laser : lasers)
+            {
+                updateLaser(laser, deltaTime); // Update laser position
+            }
+
+            // Render lasers
+            for (auto& laser : lasers)
+            {
+                renderLaser(laser, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix); // Render each laser
+            }
+
+            break;
+            }
+
+
+
+
+
+
+
 
         glfwSwapBuffers(window); // Swap buffers to update the screen
         glfwPollEvents(); // Process input events
@@ -1107,7 +1353,7 @@ int main(void)
         glfwWindowShouldClose(window) == 0); // Exit if the window is closed
 
     // Clean up game objects and resources
-    cleanup(aliens_vector, playerShip, motherShip);
+    cleanup(aliens_vector, playerShip, motherShip,shields);
 
     glDeleteProgram(programID); // Delete shader program
     glfwTerminate(); // Terminate GLFW
