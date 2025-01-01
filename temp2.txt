@@ -39,9 +39,6 @@ double lastShotTime = 0.0f;
 const float SHOT_COOLDOWN = 0.5f; // 0.5 second cooldown
 bool mothershipAlive = true;  // Track whether the mothership is alive or not
 int mothershipHealth = 10;  // Mothership health, can be adjusted
-bool mothershipMovingRight = true;  // Mothership direction
-const float mothershipSpeed = 0.05f; // Mothership movement speed
-
 
 ////////////////////////////////////////////////////
 //              Structures
@@ -489,22 +486,7 @@ void updateAlienPositions(std::vector<GameObject>& aliens_vector) {
     }
 }
 
-// Function to update mothership position
-void updateMothershipPosition(GameObject& motherShip) {
-    // Reverse direction if it hits the screen boundaries
-    if (motherShip.position.x < LEFTBOUNDARY || motherShip.position.x > RIGHTBOUNDARY) {
-        mothershipMovingRight = !mothershipMovingRight;  // Reverse direction
-    }
 
-    // Move the mothership based on its direction
-    if (mothershipMovingRight) {
-        motherShip.position.x += mothershipSpeed;
-    }
-    else {
-        motherShip.position.x -= mothershipSpeed;
-    }
-}
-    
 
 
 
@@ -579,9 +561,9 @@ bool checkLaserMothershipCollision(const Laser& laser, GameObject& motherShip) {
 void handleLaserMothershipCollision(GameObject& motherShip) {
     for (auto& laser : lasers) {
         if (!laser.active) continue;  // Skip inactive lasers
-
+        
         // Check for collision with mothership
-        if (checkLaserMothershipCollision(laser, motherShip)) {
+        if (checkLaserMothershipCollision(laser,motherShip)) {
             mothershipHealth -= 1;  // Decrease health by 1 when hit
             laser.active = false;   // Deactivate the laser after it hits the mothership
 
@@ -589,7 +571,7 @@ void handleLaserMothershipCollision(GameObject& motherShip) {
             if (mothershipHealth <= 0) {
                 mothershipAlive = false;  // Mothership is dead
                 DEBUG_PRINT("Mothership Destroyed!");
-
+                
             }
             break;  // Stop checking further once a laser hits
         }
@@ -668,6 +650,121 @@ void cleanup(std::vector<GameObject>& aliens, GameObject& playerShip, GameObject
 
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+// Define game states
+enum GameState {
+    START_MENU,
+    PLAYING,
+    PAUSED,
+    GAME_OVER,
+    NEXT_LEVEL
+
+};
+
+GameState currentGameState = START_MENU;
+
+
+// Function to render text (Placeholder)
+void renderText(const std::string& text, float x, float y, float scale, const glm::vec3& color) {
+    // Implement text rendering here using FreeType or your preferred method
+    DEBUG_PRINT("Render Text: " << text);
+}
+
+
+// Function to render a semi-transparent overlay
+void renderOverlay() {
+    glBegin(GL_QUADS);
+    glColor4f(0.0f, 0.0f, 0.0f, 0.5f); // Semi-transparent black
+    glVertex2f(-1.0f, -1.0f);
+    glVertex2f(1.0f, -1.0f);
+    glVertex2f(1.0f, 1.0f);
+    glVertex2f(-1.0f, 1.0f);
+    glEnd();
+}
+
+
+// Function to render the start menu
+void renderStartMenu() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    renderText("SPACE INVADERS 3D", 800, 600, 1.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+    renderText("Press ENTER to Start", 800, 500, 1.0f, glm::vec3(0.8f, 0.8f, 0.8f));
+    renderText("Press ESC to Quit", 800, 450, 1.0f, glm::vec3(0.8f, 0.8f, 0.8f));
+}
+
+// Function to render the pause menu
+void renderPauseMenu() {
+    renderOverlay();
+    renderText("PAUSED", 800, 600, 1.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+    renderText("Press R to Resume", 800, 500, 1.0f, glm::vec3(0.8f, 0.8f, 0.8f));
+    renderText("Press Q to Quit to Main Menu", 800, 450, 1.0f, glm::vec3(0.8f, 0.8f, 0.8f));
+}
+
+
+// Function to handle input for the start menu
+void handleStartMenuInput() {
+    if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS) {
+        currentGameState = PLAYING;
+    }
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
+}
+
+
+// Function to handle input for the pause menu
+void handlePauseMenuInput() {
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+        currentGameState = PLAYING;
+    }
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+        currentGameState = START_MENU;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ////////////////////////////////////////////////////////
 //          Main Function
 //
@@ -731,66 +828,81 @@ int main(void) {
 
     // Main render loop
     do {
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glUseProgram(programID);
+
+        switch (currentGameState) {
+
+        case START_MENU:
+            renderStartMenu();
+            handleStartMenuInput();
+            break;
+
+        case PLAYING: {
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glUseProgram(programID);
 
 
+            // Calculate deltaTime for smooth movement
+            double currentTime = glfwGetTime();
+            float deltaTime = static_cast<float>(currentTime - lastTime);
+            lastTime = currentTime;
+
+            computeMatricesFromInputs();
+            glm::mat4 ProjectionMatrix = getProjectionMatrix();
+            glm::mat4 ViewMatrix = getViewMatrix();
 
 
-        // Calculate deltaTime for smooth movement
-        double currentTime = glfwGetTime();
-        float deltaTime = static_cast<float>(currentTime - lastTime);
-        lastTime = currentTime;
+            handlePlayerMovement(playerShip, deltaTime);
 
-        computeMatricesFromInputs();
-        glm::mat4 ProjectionMatrix = getProjectionMatrix();
-        glm::mat4 ViewMatrix = getViewMatrix();
+            updateAlienPositions(aliens_vector);
 
+            handleLaserAlienCollisions(aliens_vector);
 
-        handlePlayerMovement(playerShip, deltaTime);
+            // Handle laser-mothership collision
+            handleLaserMothershipCollision(motherShip);
 
-        updateAlienPositions(aliens_vector);
-
-        handleLaserAlienCollisions(aliens_vector);
-
-        // Handle laser-mothership collision
-        handleLaserMothershipCollision(motherShip);
-
-        // Render player ship
-        playerShip.modelMatrix = glm::translate(glm::mat4(1.0f), playerShip.position);
-        playerShip.modelMatrix = glm::scale(playerShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f));
-        renderObject(playerShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+            // Render player ship
+            playerShip.modelMatrix = glm::translate(glm::mat4(1.0f), playerShip.position);
+            playerShip.modelMatrix = glm::scale(playerShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f));
+            renderObject(playerShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
 
 
-        // Render the mothership only if it's alive
-        if (mothershipAlive) {
-            updateMothershipPosition(motherShip);
-            motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position);
-            motherShip.modelMatrix = glm::scale(motherShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f));
-            renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+            // Render the mothership only if it's alive
+            if (mothershipAlive) {
+                motherShip.modelMatrix = glm::translate(glm::mat4(1.0f), motherShip.position);
+                motherShip.modelMatrix = glm::scale(motherShip.modelMatrix, glm::vec3(0.5f, 0.5f, 0.5f));
+                renderObject(motherShip, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+            }
 
+            // Render each alien dynamically
+            for (auto& alien : aliens_vector) {
+                alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position);
+                renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+            }
+
+            for (auto& laser : lasers) {
+                updateLaser(laser, deltaTime);
+            }
+
+            // Render the lasers
+            for (auto& laser : lasers) {
+                renderLaser(laser, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+            }
+
+            if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+                currentGameState = PAUSED;
+            }
+            break;
         }
 
-        // Render each alien dynamically
-        for (auto& alien : aliens_vector) {
-            alien.modelMatrix = glm::translate(glm::mat4(1.0f), alien.position);
-            renderObject(alien, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
+        case PAUSED:
+            renderPauseMenu();
+            handlePauseMenuInput();
+            break;
+
+        case GAME_OVER:
+            // Placeholder for future game-over handling
+            break;
         }
-
-        for (auto& laser : lasers) {
-            updateLaser(laser, deltaTime);
-        }
-
-        // Render the lasers
-        for (auto& laser : lasers) {
-            renderLaser(laser, MatrixID, ModelMatrixID, ViewMatrixID, textureID, ProjectionMatrix, ViewMatrix);
-
-        }
-
-
-
-
-
 
         glfwSwapBuffers(window);
         glfwPollEvents();
