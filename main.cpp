@@ -205,7 +205,7 @@ Shield createShield(const glm::vec3& position, int health);
 void createExplosion(Explosion& explosion, const glm::vec3& position);
 
 // Function to load the mothership
-void createMothership(GameObject& motherShip);
+void createMothership(GameObject& motherShip, int motherShipHealth);
 
 // Function to create a laser
 void createLaser(Laser& laser, const glm::vec3& playerPosition, const glm::vec3& startPos, bool player_shot, const glm::vec3& alienPosition = glm::vec3(0.0f, 0.0f, 0.0f));
@@ -292,16 +292,18 @@ public:
 	int colAliens;
 	int shieldHealth;
 	float alienSpeed;
+	int motherShipHealth;
 
-	Level(int rowAliens, int colAliens, int shieldHealth, int playerHealth, float alienSpeed)
-		: rowAliens(rowAliens), colAliens(colAliens), shieldHealth(shieldHealth), playerHealth(playerHealth), alienSpeed(alienSpeed) {
+	Level(int rowAliens, int colAliens, int shieldHealth, int playerHealth, float alienSpeed, int motherShipHealth)
+		: rowAliens(rowAliens), colAliens(colAliens), shieldHealth(shieldHealth), playerHealth(playerHealth), alienSpeed(alienSpeed), motherShipHealth(motherShipHealth) {
 	}
 
 	void initialize() {
 		createPlayer(playerShip);
-		createMothership(motherShip);
-		createAliens(aliens, rowAliens, colAliens);
+		createMothership(motherShip, motherShipHealth);
 		createShields();
+		createAliens(aliens, rowAliens, colAliens);
+
 	}
 
 	void createShields() {
@@ -323,6 +325,8 @@ public:
 			cleanupGameObject(shield.obj);
 		}
 		shields.clear();
+		objCache.clear();
+		effectclean(explosions, lasers);
 		DEBUG_PRINT("Level Cleanup complete!");
 
 	}
@@ -344,7 +348,7 @@ public:
 	}
 
 	void startNextLevel() {
-		
+
 		if (currentLevel) {
 			currentLevel->cleanuplevel();
 			delete currentLevel;
@@ -355,10 +359,11 @@ public:
 		int rowAliens = 3 + currentLevelNumber; // Increase the number of rows with each level
 		int colAliens = 3 + currentLevelNumber; // Increase the number of columns with each level
 		int shieldHealth = 10 + (currentLevelNumber * 5); // Increase shield health with each level
-		float alienSpeed = 0.02f + (currentLevelNumber * 0.01f); // Increase alien speed with each level
+		float alienSpeed = 0.01f + (currentLevelNumber * 0.01f); // Increase alien speed with each level
 		int playerHealth = 3; // Reset player health for each level
+		int motherShipHealth = 5 + (currentLevelNumber * 5); // Increase mothership health with each level
 
-		currentLevel = new Level(rowAliens, colAliens, shieldHealth, playerHealth, alienSpeed);
+		currentLevel = new Level(rowAliens, colAliens, shieldHealth, playerHealth, alienSpeed, motherShipHealth);
 		currentLevel->initialize();
 	}
 };
@@ -692,7 +697,7 @@ void createExplosion(Explosion& explosion, const glm::vec3& position)
 
 //-------------------------------------------------------------------------------------------------
 // Function to load the mothership
-void createMothership(GameObject& motherShip)
+void createMothership(GameObject& motherShip, int motherShipHealth)
 {
 	// Log the creation process of the mothership
 	DEBUG_PRINT("Creating mothership...");
@@ -714,13 +719,13 @@ void createMothership(GameObject& motherShip)
 	mothershipAlive = true;
 
 	// Set initial health value (this can be adjusted later)
-	int mothershipHealth = 10;
+	mothershipHealth = motherShipHealth;
 
 	// Load the mothership object data
 	loadGameObject(motherShip);
 
 	// Log the successful creation of the mothership with its unique ID
-	DEBUG_PRINT("Mothership created!");
+	DEBUG_PRINT("Mothership created with health: " << mothershipHealth);
 }
 
 
@@ -872,7 +877,7 @@ void renderObject(const GameObject& obj, GLuint MatrixID, GLuint ModelMatrixID, 
 	glDisableVertexAttribArray(1);
 	glDisableVertexAttribArray(2);
 
-	
+
 }
 
 
@@ -1571,6 +1576,7 @@ int main(void)
 	{
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the screen
+
 		glUseProgram(programID); // Use the shader program
 
 		handleGameStates();
@@ -1751,7 +1757,7 @@ int main(void)
 		glfwPollEvents(); // Process input events
 
 
-		
+
 
 	} while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS && // Exit if the ESC key is pressed
 		glfwWindowShouldClose(window) == 0); // Exit if the window is closed
