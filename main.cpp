@@ -22,6 +22,9 @@ using namespace glm;
 // Include additional necessary headers from the project's common folder
 #include "common/shader.hpp"        // Shader loading and compiling functions
 #include "common/controls.hpp"      // Controls handling (e.g., keyboard and mouse input)
+#include "common/texture.hpp"       // Texture loading functions
+#include "common/text2D.hpp"        // Text rendering functions
+
 
 // Include TinyObjLoader for loading .obj 3D model files
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -54,23 +57,26 @@ int nextObjectId = 0;              // A global counter to ensure each object has
 int playerPoints = 0;			 // Global variable to keep track of the player's points
 int HighScore = 0;				 // Global variable to keep track of the player's high score
 
+
 // Alien Related
 float alienSpeed = 0.02f;          // Speed at which aliens move horizontally
 bool alienMovingRight = true;      // Boolean flag to indicate the current direction of alien movement (right or left)
 float alienDropDistance = 0.5f;    // Distance that aliens move down when they hit a boundary
+int alien_laser_timer = 1; 		   // Timer for alien laser firing
 
 // MotherShip Related
-bool mothershipAlive = false;       // Flag to check if the mothership is still alive
-int mothershipHealth = 10;              // Variable to hold the health of the mothership, can be adjusted
-bool mothershipMovingRight = true; // Direction flag for the mothership (moving right or left)
-const float mothershipSpeed = 0.05f; // Speed at which the mothership moves horizontally
+bool mothershipAlive = false;         // Flag to check if the mothership is still alive
+int mothershipHealth = 10;            // Variable to hold the health of the mothership, can be adjusted
+bool mothershipMovingRight = true;    // Direction flag for the mothership (moving right or left)
+const float mothershipSpeed = 0.05f;  // Speed at which the mothership moves horizontally
+int mothership_laser_timer = 5;       // Timer for mothership laser firing
 
 //Player Related
 const float PLAYER_SPEED = 20.0f;  // Speed at which the player can move
 double lastShotTime = 0.0f;        // Stores the time when the last shot was fired (for cooldown purposes)
 const float SHOT_COOLDOWN = 0.3f;  // Cooldown duration for shooting
 double lastHitTime = 0.0; // Stores the time when the player was last hit
-const float INVINCIBILITY_DURATION = 5.0f; // Duration of invincibility in seconds
+const float INVINCIBILITY_DURATION = 3.0f; // Duration of invincibility in seconds
 bool isInvincible = false; // Flag to indicate if the player is currently invincible
 bool isBlinking = false; // Flag to indicate if the player is currently blinking
 double nextBlinkTime = 0.0; // Time for the next blink
@@ -163,6 +169,7 @@ struct Explosion
 };
 
 
+
 // Declare a cache to store parsed OBJ file data to avoid reloading the same file multiple times
 std::map<std::string, ObjCache> objCache;
 
@@ -175,8 +182,8 @@ std::vector<Explosion> explosions;
 // Initially, the game starts in the start state
 GameState currentState = GAME_START;
 
-
-
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 // Function prototypes
 
 // Function to load textures and cache them to avoid reloading the same texture multiple times
@@ -280,8 +287,8 @@ void renderExplosions(Explosion& explosion, GLuint MatrixID, GLuint ModelMatrixI
 
 
 
-
-
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 // Define the Level class to encapsulate level-specific logic
 class Level {
 public:
@@ -295,6 +302,7 @@ public:
 	int shieldHealth;
 	float alienSpeed;
 	int motherShipHealth;
+
 
 	Level(int rowAliens, int colAliens, int shieldHealth, int playerHealth, float alienSpeed, int motherShipHealth)
 		: rowAliens(rowAliens), colAliens(colAliens), shieldHealth(shieldHealth), playerHealth(playerHealth), alienSpeed(alienSpeed), motherShipHealth(motherShipHealth) {
@@ -319,7 +327,6 @@ public:
 		if (mothershipAlive) {
 			cleanupGameObject(motherShip);
 		}
-		effectclean(explosions, lasers);
 		for (auto& alien : aliens) {
 			cleanupGameObject(alien);
 		}
@@ -328,12 +335,15 @@ public:
 			cleanupGameObject(shield.obj);
 		}
 		shields.clear();
+		effectclean(explosions, lasers);
 		objCache.clear();
 		DEBUG_PRINT("Level Cleanup complete!");
 
 	}
 };
 
+
+//-------------------------------------------------------------------------------------------------
 // Define the LevelManager class to manage levels
 class LevelManager {
 public:
@@ -1147,7 +1157,7 @@ void handleLaserAlienCollisions(std::vector<GameObject>& aliens, std::vector<Exp
 					createExplosion(explosion, it->position);
 					explosions.push_back(explosion);
 
-					playerPoints += 50; // Add 50 points for each alien destroyed
+					playerPoints += 5; // Add 50 points for each alien destroyed
 
 					it = aliens.erase(it);   // Remove alien from the array on collision
 					laserIt->active = false; // Deactivate the laser after collision
@@ -1216,7 +1226,7 @@ void handleLaserMothershipCollision(GameObject& mothership, std::vector<Explosio
 					mothershipAlive = false; // Set mothership as destroyed
 					DEBUG_PRINT("Mothership Destroyed!");
 
-					playerPoints += 500; // Add 500 points for each mothership destroyed
+					playerPoints += 50; // Add 500 points for each mothership destroyed
 
 					// Create an explosion at the mothership's position
 					Explosion explosion;
@@ -1429,15 +1439,12 @@ void handleGameStates() {
 		pKeyPressed = false; // Reset the flag when the key is released
 	}
 
-	// Detect "Enter" key press for starting/continuing the game
+	// Detect "Enter" key press to start the game
 	static bool enterKeyPressed = false;
 	if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS) {
 		if (!enterKeyPressed) {
 			if (currentState == GAME_START) {
 				currentState = GAME_PLAYING;  // Start the game
-			}
-			else if (currentState == NEW_LEVEL) {
-				currentState = GAME_PLAYING; // Start the next level
 			}
 			enterKeyPressed = true; // Flag that the key is pressed
 		}
@@ -1448,7 +1455,7 @@ void handleGameStates() {
 
 	// Detect "R" key press for restarting the game
 	static bool rKeyPressed = false;
-	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS && currentState == GAME_OVER) {
+	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 		if (!rKeyPressed) {
 			if (currentState == GAME_OVER) {
 
@@ -1461,12 +1468,11 @@ void handleGameStates() {
 		rKeyPressed = false; // Reset the flag when the key is released
 	}
 
-	//TEMPORARIO
 
 	if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS) {
 		if (!pKeyPressed) {
 			if (currentState == NEW_LEVEL) {
-				currentState = NEW_LEVEL_START; 
+				currentState = NEW_LEVEL_START;
 			}
 
 			pKeyPressed = true; // Flag that the key is pressed
@@ -1476,10 +1482,22 @@ void handleGameStates() {
 		pKeyPressed = false; // Reset the flag when the key is released
 	}
 
-	//TEMPORARIO
+
+	if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
+		if (!pKeyPressed) {
+			if (currentState == GAME_PLAYING) {
+				currentState = NEW_LEVEL;  // Pause the game
+			}
+			pKeyPressed = true; // Flag that the key is pressed
+		}
+	}
+	else if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
+		pKeyPressed = false; // Reset the flag when the key is released
+	}
 
 
 }
+
 
 //-------------------------------------------------------------------------------------------------
 // Function to update explosions
@@ -1512,6 +1530,12 @@ void renderExplosions(Explosion& explosion, GLuint MatrixID, GLuint ModelMatrixI
 	}
 }
 
+void checkOpenGLError(const std::string& location) {
+	GLenum err;
+	while ((err = glGetError()) != GL_NO_ERROR) {
+		std::cerr << "OpenGL error at " << location << ": " << err << std::endl;
+	}
+}
 
 
 
@@ -1535,7 +1559,7 @@ int main(void)
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // Use core OpenGL profile
 
 	// Create a GLFW window
-	window = glfwCreateWindow(1920, 1080, "Space Invaders | Trabalho Final", NULL, NULL);
+	window = glfwCreateWindow(1920, 1080, "Space Invaders 3D | Projeto Final", NULL, NULL);
 	if (window == NULL)
 	{
 		DEBUG_PRINT("Failed to open GLFW window!"); // Error message if window creation fails
@@ -1544,7 +1568,9 @@ int main(void)
 	}
 
 	glfwMakeContextCurrent(window); // Make the context of the window current
+
 	glewExperimental = true;
+
 	if (glewInit() != GLEW_OK)
 	{
 		DEBUG_PRINT("Failed to initialize GLEW!"); // Error message if GLEW initialization fails
@@ -1555,7 +1581,8 @@ int main(void)
 	// Set input modes for GLFW (sticky keys and disable cursor)
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE); // Ensures keys remain pressed after being detected
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Hides the cursor
-	glfwSetCursorPos(window, 1920 / 2, 1080 / 2); // Position the cursor at the center of the window
+	glfwPollEvents();
+	glfwSetCursorPos(window, static_cast<double>(1920) / 2, static_cast<double>(1080) / 2); // Position the cursor at the center of the window
 
 	// OpenGL settings
 	glClearColor(0.25f, 0.25f, 0.25f, 0.0f); // Set background color
@@ -1563,8 +1590,9 @@ int main(void)
 	glDepthFunc(GL_LESS); // Use less than comparison for depth testing
 	glEnable(GL_CULL_FACE); // Enable face culling (only render front faces)
 
+
 	// Load shaders (vertex and fragment shaders)
-	GLuint programID = LoadShaders("main.vertexshader", "main.fragmentshader");
+	GLuint programID = LoadShaders("shaders/main.vertexshader", "shaders/main.fragmentshader");
 	DEBUG_PRINT("Shaders loaded successfully!");
 
 	// Get uniform locations for transformation matrices and texture
@@ -1581,11 +1609,8 @@ int main(void)
 
 	double lastTime = glfwGetTime(); // Store the initial time for deltaTime calculations
 
-
-	// FOR NOW THEY ARE STATIC VALUES 
-
-	int alien_laser_timer = 1;
-	int mothership_laser_timer = 5;
+	// Load the font texture for text rendering
+	initText2D("fonts/Holstein.DDS");
 
 
 	// Main game loop
@@ -1603,17 +1628,85 @@ int main(void)
 
 
 		case GAME_START:
-			// Render the "Start" screen image
+			char STARTTEXT[256];
+			sprintf(STARTTEXT, "WELCOME TO SPACE INVADERS");
+			printText2D(STARTTEXT, 20, 500, 30);
+
+			char MOVELEFTTEXT[256];
+			sprintf(MOVELEFTTEXT, "A - Move Left");
+			printText2D(MOVELEFTTEXT, 20, 360, 20);
+
+			char MOVERIGHTTEXT[256];
+			sprintf(MOVERIGHTTEXT, "D - Move Right");
+			printText2D(MOVERIGHTTEXT, 400, 360, 20);
+
+			char SHOOTTEXT[256];
+			sprintf(SHOOTTEXT, "Spacebar - Shoot");
+			printText2D(SHOOTTEXT, 210, 280, 20);
+
+			char PAUSETEXT[256];
+			sprintf(PAUSETEXT, "P - Pause Game");
+			printText2D(PAUSETEXT, 20, 200, 20);
+
+			char PLAYERCAMERATEXT[256];
+			sprintf(PLAYERCAMERATEXT, "1 - Player Camera");
+			printText2D(PLAYERCAMERATEXT, 400, 200, 20);
+
+			char BATTLECAMERATEXT[256];
+			sprintf(BATTLECAMERATEXT, "2 - Front Camera");
+			printText2D(BATTLECAMERATEXT, 20, 120, 20);
+
+			char FREECAMERATEXT[256];
+			sprintf(FREECAMERATEXT, "3 - Free Camera");
+			printText2D(FREECAMERATEXT, 400, 120, 20);
+
+			char INSTRUCTIONSTEXT[256];
+			sprintf(INSTRUCTIONSTEXT, "Press ENTER to Start");
+			printText2D(INSTRUCTIONSTEXT, 20, 20, 35);
+
 
 			break;
 
 		case GAME_PAUSED:
-			// Render the "Paused" image
+			
+			char PAUSEDTEXT[256];
+			sprintf(PAUSEDTEXT, "GAME PAUSED");
+			printText2D(PAUSEDTEXT, 50, 450, 50);
+
+			char RESUMETEXT[256];
+			sprintf(RESUMETEXT, "Press 'P' to Resume");
+			printText2D(RESUMETEXT, 20, 250, 30);
+
+			char EXITTEXT[256];
+			sprintf(EXITTEXT, "Press 'Esc' to Exit");
+			printText2D(EXITTEXT, 20, 150, 30);
+
+
 			break;
 
 
 		case NEW_LEVEL:
-			// Render the "New Level" image
+			
+			
+			char NEXTLEVELTEXT[256];
+			sprintf(NEXTLEVELTEXT, "NEXT LEVEL");
+			printText2D(NEXTLEVELTEXT, 50, 450, 50);
+			checkOpenGLError("After printing NEXTLEVELTEXT");
+
+
+			char PROGRESSTEXT[256];
+			sprintf(PROGRESSTEXT, "Good Job! Get Ready!");
+			printText2D(PROGRESSTEXT, 20, 250, 35);
+			checkOpenGLError("After printing PROGRESSTEXT");
+
+
+			char CONTINUETEXT[256];
+			sprintf(CONTINUETEXT, "Press 'Enter' to Continue");
+			printText2D(CONTINUETEXT, 20, 150, 30);
+			checkOpenGLError("After printing CONTINUETEXT");
+
+			
+
 			break;
 
 		case NEW_LEVEL_START:
@@ -1625,16 +1718,38 @@ int main(void)
 			{
 				HighScore = playerPoints;
 			}
-			playerPoints = 0;
+			effectclean(explosions, lasers); // Clean up explosions and lasers
 			LEVELMANAGER.startNextLevel();
 			currentState = GAME_PLAYING;
 			break;
 		case GAME_OVER:
-			// Render the "Game Over" image
+
+			char GAMEOVERTEXT[256];
+			sprintf(GAMEOVERTEXT, "GAME OVER");
+			printText2D(GAMEOVERTEXT, 20, 500, 50);
+
+			char FINALSCORETEXT[256];
+			sprintf(FINALSCORETEXT, "Your Score: %d", playerPoints);
+			printText2D(FINALSCORETEXT, 20, 300, 25);
+
+			char HIGHSCORETEXT[256];
+			sprintf(HIGHSCORETEXT, "Highscore: %d", HighScore);
+			printText2D(HIGHSCORETEXT, 20, 200, 25);
+
+			char RESTARTTEXT[256];
+			sprintf(RESTARTTEXT, "Press 'R' to Restart");
+			printText2D(RESTARTTEXT, 20, 100, 30);
+
+
 			break;
 
 		case GAME_RESET:
 			// Reset the game
+			if (playerPoints > HighScore)
+			{
+				HighScore = playerPoints;
+			}
+			playerPoints = 0;
 			LEVELMANAGER.resetLevel();
 			currentState = GAME_PLAYING;
 			break;
@@ -1768,34 +1883,43 @@ int main(void)
 			{
 				DEBUG_PRINT("LEVEL WON!");
 				DEBUG_PRINT("POINTS -> " << playerPoints);
-				effectclean(explosions, lasers); // Clean up explosions and lasers
 				currentState = NEW_LEVEL; // Transition to the new level state
 			}
+
+
+
+
+
+			char life_text[256];
+			sprintf(life_text, "LIFES %d", LEVELMANAGER.currentLevel->playerHealth);
+			printText2D(life_text, 20, 20, 25);
+
+			char points_text[256];
+			sprintf(points_text, "POINTS %d", playerPoints);
+			printText2D(points_text, 450, 20, 25);
+
 
 
 			break;
 		}
 
-
-
-
-
-
-
-
+		glUseProgram(0); // Unbind the shader program
 		glfwSwapBuffers(window); // Swap buffers to update the screen
 		glfwPollEvents(); // Process input events
-
 
 
 
 	} while (glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS && // Exit if the ESC key is pressed
 		glfwWindowShouldClose(window) == 0); // Exit if the window is closed
 
-
+	if (playerPoints > HighScore)
+	{
+		HighScore = playerPoints;
+	}
 
 	DEBUG_PRINT("HIGH SCORE -> " << HighScore);
 
+	cleanupText2D(); // Clean up text resources
 	effectclean(explosions, lasers); // Clean up explosions and lasers
 	objCache.clear();
 	glDeleteProgram(programID); // Delete shader program
