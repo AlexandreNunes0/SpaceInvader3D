@@ -52,6 +52,7 @@ float LEFTBOUNDARY = -50.0f;       // Left boundary of the movement area
 float RIGHTBOUNDARY = 50.0f;       // Right boundary of the movement area
 int nextObjectId = 0;              // A global counter to ensure each object has a unique identifier (ID)
 int playerPoints = 0;			 // Global variable to keep track of the player's points
+int HighScore = 0;				 // Global variable to keep track of the player's high score
 
 // Alien Related
 float alienSpeed = 0.02f;          // Speed at which aliens move horizontally
@@ -139,7 +140,8 @@ enum GameState {
 	GAME_PAUSED,
 	GAME_OVER,
 	NEW_LEVEL,
-	NEW_LEVEL_START
+	NEW_LEVEL_START,
+	GAME_RESET
 };
 
 
@@ -317,6 +319,7 @@ public:
 		if (mothershipAlive) {
 			cleanupGameObject(motherShip);
 		}
+		effectclean(explosions, lasers);
 		for (auto& alien : aliens) {
 			cleanupGameObject(alien);
 		}
@@ -326,7 +329,6 @@ public:
 		}
 		shields.clear();
 		objCache.clear();
-		effectclean(explosions, lasers);
 		DEBUG_PRINT("Level Cleanup complete!");
 
 	}
@@ -365,6 +367,18 @@ public:
 
 		currentLevel = new Level(rowAliens, colAliens, shieldHealth, playerHealth, alienSpeed, motherShipHealth);
 		currentLevel->initialize();
+	}
+
+	void resetLevel() {
+		if (currentLevel) {
+			currentLevel->cleanuplevel();
+			delete currentLevel;
+			currentLevel = nullptr; // Ensure the pointer is set to nullptr after deletion
+
+		}
+
+		currentLevelNumber = 0;
+		startNextLevel();
 	}
 };
 
@@ -1436,8 +1450,11 @@ void handleGameStates() {
 	static bool rKeyPressed = false;
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS && currentState == GAME_OVER) {
 		if (!rKeyPressed) {
-			currentState = GAME_START; // Restart the game
-			rKeyPressed = true; // Flag that the key is pressed
+			if (currentState == GAME_OVER) {
+
+				currentState = GAME_RESET; // Restart the game
+				rKeyPressed = true; // Flag that the key is pressed
+			}
 		}
 	}
 	else if (glfwGetKey(window, GLFW_KEY_R) == GLFW_RELEASE) {
@@ -1449,7 +1466,7 @@ void handleGameStates() {
 	if (glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS) {
 		if (!pKeyPressed) {
 			if (currentState == NEW_LEVEL) {
-				currentState = NEW_LEVEL_START;  // Pause the game
+				currentState = NEW_LEVEL_START; 
 			}
 
 			pKeyPressed = true; // Flag that the key is pressed
@@ -1601,6 +1618,14 @@ int main(void)
 
 		case NEW_LEVEL_START:
 			// Start the next level
+			DEBUG_PRINT("HIGH SCORE -> " << HighScore);
+			DEBUG_PRINT("SCORE -> " << playerPoints);
+
+			if (playerPoints > HighScore)
+			{
+				HighScore = playerPoints;
+			}
+			playerPoints = 0;
 			LEVELMANAGER.startNextLevel();
 			currentState = GAME_PLAYING;
 			break;
@@ -1608,6 +1633,11 @@ int main(void)
 			// Render the "Game Over" image
 			break;
 
+		case GAME_RESET:
+			// Reset the game
+			LEVELMANAGER.resetLevel();
+			currentState = GAME_PLAYING;
+			break;
 		case GAME_PLAYING:
 
 
@@ -1764,7 +1794,7 @@ int main(void)
 
 
 
-
+	DEBUG_PRINT("HIGH SCORE -> " << HighScore);
 
 	effectclean(explosions, lasers); // Clean up explosions and lasers
 	objCache.clear();
